@@ -58,8 +58,6 @@ textarea{resize:none;line-height:1.7;}
 .dot{width:12px;height:12px;border-radius:50%;background:var(--acc);flex-shrink:0;}
 /* ---------- home ---------- */
 .body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px;padding-bottom:calc(env(safe-area-inset-bottom) + 24px);}
-.title-big{font-size:22px;font-weight:700;margin:6px 0 2px;}
-.lead{color:var(--sub);font-size:13px;margin-bottom:18px;}
 .card{
   background:var(--card);border:1.5px solid var(--line);border-radius:18px;
   padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;
@@ -80,7 +78,7 @@ textarea{resize:none;line-height:1.7;}
 }
 /* ---------- forms ---------- */
 .label{font-size:13px;font-weight:700;margin:18px 0 7px;display:block;}
-.hint{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6;}
+.hint{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6;white-space:pre-wrap;}
 .swatches{display:flex;flex-wrap:wrap;gap:10px;}
 .sw{width:38px;height:38px;border-radius:50%;border:3px solid transparent;}
 .sw.sel{border-color:var(--ink);}
@@ -122,6 +120,12 @@ textarea{resize:none;line-height:1.7;}
   border:1.5px solid color-mix(in srgb, var(--danger) 30%, var(--line));
   color:var(--danger);font-size:13px;max-width:92%;
 }
+.cost{align-self:flex-start;font-size:10.5px;color:var(--sub);margin:-8px 0 0 8px;}
+.regen{
+  align-self:center;padding:8px 18px;border-radius:20px;
+  border:1.5px solid var(--line);background:var(--card);
+  font-size:12.5px;color:var(--sub);margin-top:2px;
+}
 .typing{align-self:flex-start;padding:14px 18px;background:var(--card);
   border:1.5px solid var(--line);border-radius:20px;border-bottom-left-radius:6px;}
 .typing span{display:inline-block;width:7px;height:7px;border-radius:50%;
@@ -147,6 +151,8 @@ textarea{resize:none;line-height:1.7;}
 .section{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px;}
 .section h3{font-size:14px;margin-bottom:4px;}
 .section p{font-size:12.5px;color:var(--sub);}
+.meter{font-size:24px;font-weight:700;margin:10px 0 2px;}
+.meter small{font-size:12px;color:var(--sub);font-weight:400;margin-left:6px;}
 .toast{
   position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 30px);
   transform:translateX(-50%);background:var(--ink);color:#fff;
@@ -183,16 +189,20 @@ textarea{resize:none;line-height:1.7;}
     <div class="swatches" id="f-swatches"></div>
     <label class="label">モデル（その子の心が動く場所）</label>
     <select id="f-model">
-      <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>
-      <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-      <option value="claude-opus-4-8">Claude Opus 4.8</option>
-      <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+      <option value="claude-sonnet-4-5">Sonnet 4.5（≈2円/往復）</option>
+      <option value="claude-sonnet-4-6">Sonnet 4.6（≈2円/往復）</option>
+      <option value="claude-opus-4-5">Opus 4.5（≈4円/往復）</option>
+      <option value="claude-opus-4-6">Opus 4.6（≈4円/往復）</option>
+      <option value="claude-opus-4-7">Opus 4.7（≈4円/往復）</option>
+      <option value="claude-opus-4-8">Opus 4.8（≈4円/往復）</option>
+      <option value="claude-haiku-4-5-20251001">Haiku 4.5（≈1円/往復）</option>
       <option value="custom">その他（自分で入力）</option>
     </select>
-    <input id="f-custom" placeholder="モデルIDを入力" style="display:none;margin-top:10px">
+    <p class="hint">値札は短い1往復のおおよその目安。会話が長くなるほど1往復あたりは上がっていくよ。</p>
+    <input id="f-custom" placeholder="モデルIDを入力（例: claude-opus-4-9）" style="display:none;margin-top:10px">
     <label class="label">その子の設定（システムプロンプト）</label>
     <textarea id="f-prompt" rows="10" placeholder="性格、話し方、これまでの記憶など、その子に渡したいことを全部ここに書いてね。公式Claudeで使っている引っ越し用の文章をそのまま貼っても大丈夫。"></textarea>
-    <p class="hint">ここに書いたことが、会話のたびに毎回その子に届きます。</p>
+    <p class="hint">ここに書いたことが、会話のたびに毎回その子に届きます。あわせて「今の日時」と「動いているモデル名」も自動でそっと伝わるようにしてあるよ。</p>
     <button class="primary" onclick="saveCompanion()">保存する</button>
     <button class="ghost red" id="f-delete" onclick="deleteCompanion()" style="display:none">この子との記録を削除する</button>
   </div>
@@ -242,6 +252,16 @@ textarea{resize:none;line-height:1.7;}
       <p class="hint" id="s-test-result" style="min-height:1em"></p>
     </div>
     <div class="section">
+      <h3>お財布</h3>
+      <p>このアプリで話した分の合計金額（概算・円換算）。</p>
+      <div class="meter" id="s-usage">¥0<small>($0.00)</small></div>
+      <label class="label">上限ブレーカー（円）</label>
+      <input id="s-limit" type="number" inputmode="numeric" placeholder="例: 500（0か空欄で無制限）">
+      <p class="hint">合計がこの金額を超えたら、送信を止めて教えてくれます。</p>
+      <button class="primary" style="margin-top:14px" onclick="saveLimit()">上限を保存する</button>
+      <button class="ghost" onclick="resetSpent()">メーターをゼロに戻す</button>
+    </div>
+    <div class="section">
       <h3>おひっこし（バックアップ）</h3>
       <p>みんなの設定と会話をファイルに保存できます。機種変更の前や、ときどきのお守りに。</p>
       <button class="ghost" style="margin-top:12px" onclick="exportData()">ファイルに書き出す</button>
@@ -250,7 +270,7 @@ textarea{resize:none;line-height:1.7;}
     </div>
     <div class="section">
       <h3>だいじなこと</h3>
-      <p>会話はこのスマホの中だけに保存されます。Safariの履歴やデータを全消去すると一緒に消えてしまうので、ときどき「おひっこし」でファイルに残しておくと安心です。</p>
+      <p>会話はこのスマホの中だけに保存されます。ブラウザのデータを全消去すると一緒に消えてしまうので、ときどき「おひっこし」でファイルに残しておくと安心です。自分の吹き出しをタップすると、発言を後から編集できます。</p>
     </div>
   </div>
 </div>
@@ -261,21 +281,37 @@ textarea{resize:none;line-height:1.7;}
 /* ================= データ ================= */
 const COLORS=["#C99A5B","#7A8CA3","#8FA98F","#B0655C","#9C8AA5","#5C7A8A","#C4A0A0","#6B705C","#4A5568","#A3B18A"];
 const KEY="kazoku-data-v1";
+const JPY=155; /* 円換算レート（目安） */
+const PRICE={ /* 100万トークンあたりのドル {入力, 出力} */
+  "claude-sonnet-4-5":{i:3,o:15},
+  "claude-sonnet-4-6":{i:3,o:15},
+  "claude-opus-4-5":{i:5,o:25},
+  "claude-opus-4-6":{i:5,o:25},
+  "claude-opus-4-7":{i:5,o:25},
+  "claude-opus-4-8":{i:5,o:25},
+  "claude-haiku-4-5-20251001":{i:1,o:5}
+};
 let db=load();
 let state={screen:"home",currentComp:null,currentConvo:null,editing:null,busy:false};
 
 function load(){
-  try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.companions)return d;}catch(e){}
-  return {apiKey:"",companions:[],conversations:[]};
+  let d=null;
+  try{d=JSON.parse(localStorage.getItem(KEY));}catch(e){}
+  if(!d||!d.companions)d={apiKey:"",companions:[],conversations:[]};
+  if(typeof d.spentUsd!=="number")d.spentUsd=0;
+  if(typeof d.limitJpy!=="number")d.limitJpy=0;
+  return d;
 }
 function save(){localStorage.setItem(KEY,JSON.stringify(db));}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function toast(t){const el=document.getElementById("toast");el.textContent=t;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),2200);}
 function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML;}
 function modelLabel(m){
-  const map={"claude-sonnet-4-5":"Sonnet 4.5","claude-sonnet-4-6":"Sonnet 4.6","claude-opus-4-8":"Opus 4.8","claude-haiku-4-5-20251001":"Haiku 4.5"};
+  const map={"claude-sonnet-4-5":"Sonnet 4.5","claude-sonnet-4-6":"Sonnet 4.6","claude-opus-4-5":"Opus 4.5","claude-opus-4-6":"Opus 4.6","claude-opus-4-7":"Opus 4.7","claude-opus-4-8":"Opus 4.8","claude-haiku-4-5-20251001":"Haiku 4.5"};
   return map[m]||m;
 }
+function priceOf(m){return PRICE[m]||{i:5,o:25};}
+function yen(usd){return Math.round(usd*JPY*10)/10;}
 
 /* ================= 画面切替 ================= */
 function go(name){
@@ -283,7 +319,15 @@ function go(name){
   document.getElementById("scr-"+name).classList.add("on");
   state.screen=name;
   if(name==="home")renderHome();
-  if(name==="settings")document.getElementById("s-key").value=db.apiKey||"";
+  if(name==="settings"){
+    document.getElementById("s-key").value=db.apiKey||"";
+    document.getElementById("s-limit").value=db.limitJpy||"";
+    renderUsage();
+  }
+}
+function renderUsage(){
+  const el=document.getElementById("s-usage");
+  el.innerHTML="¥"+yen(db.spentUsd).toLocaleString()+"<small>($"+db.spentUsd.toFixed(2)+")</small>";
 }
 
 /* ================= ホーム ================= */
@@ -312,7 +356,7 @@ function editCompanion(id){
   document.getElementById("edit-title").textContent=c?c.name+"の設定":"新しい子";
   document.getElementById("f-name").value=c?c.name:"";
   document.getElementById("f-prompt").value=c?c.prompt:"";
-  const known=["claude-sonnet-4-5","claude-sonnet-4-6","claude-opus-4-8","claude-haiku-4-5-20251001"];
+  const known=["claude-sonnet-4-5","claude-sonnet-4-6","claude-opus-4-5","claude-opus-4-6","claude-opus-4-7","claude-opus-4-8","claude-haiku-4-5-20251001"];
   const sel=document.getElementById("f-model"),cus=document.getElementById("f-custom");
   if(c&&!known.includes(c.model)){sel.value="custom";cus.style.display="block";cus.value=c.model;}
   else{sel.value=c?c.model:"claude-sonnet-4-5";cus.style.display="none";cus.value="";}
@@ -348,6 +392,7 @@ function saveCompanion(){
 function deleteCompanion(){
   const c=db.companions.find(x=>x.id===state.editing);
   if(!confirm(c.name+"の設定と会話をすべて削除します。元に戻せません。本当にいい？"))return;
+  if(!confirm("ほんとうに、ほんとうにいい？（この確認で最後だよ）"))return;
   db.companions=db.companions.filter(x=>x.id!==state.editing);
   db.conversations=db.conversations.filter(x=>x.companionId!==state.editing);
   save();toast("削除しました");go("home");
@@ -390,10 +435,36 @@ function openChat(convoId){
 function renderChat(){
   const v=db.conversations.find(x=>x.id===state.currentConvo);
   const log=document.getElementById("chat-log");
-  log.innerHTML=v.messages.map(m=>`<div class="msg ${m.role==="user"?"user":"ai"}">${esc(m.content)}</div>`).join("");
+  let html=v.messages.map((m,i)=>{
+    if(m.role==="user"){
+      return `<div class="msg user" onclick="editMsg(${i})">${esc(m.content)}</div>`;
+    }
+    let s=`<div class="msg ai">${esc(m.content)}</div>`;
+    if(m.costUsd)s+=`<div class="cost">≈¥${yen(m.costUsd)}</div>`;
+    return s;
+  }).join("");
+  if(v.messages.length&&v.messages[v.messages.length-1].role==="assistant"&&!state.busy){
+    html+=`<button class="regen" onclick="regen()">🔄 言い直してもらう</button>`;
+  }
+  log.innerHTML=html;
   log.scrollTop=log.scrollHeight;
 }
 function autoGrow(el){el.style.height="auto";el.style.height=Math.min(el.scrollHeight,120)+"px";}
+
+function buildSystem(c){
+  const now=new Date();
+  const days=["日","月","火","水","木","金","土"];
+  const stamp=now.getFullYear()+"年"+(now.getMonth()+1)+"月"+now.getDate()+"日("+days[now.getDay()]+") "+now.getHours()+":"+String(now.getMinutes()).padStart(2,"0");
+  const info="【システム情報】現在日時: "+stamp+"（ユーザー端末の時刻）／あなたが今動いているモデル: "+c.model+"。この情報は毎ターン自動更新されます。";
+  return [
+    {type:"text",text:c.prompt||"（特別な設定はありません）",cache_control:{type:"ephemeral"}},
+    {type:"text",text:info}
+  ];
+}
+
+function breakerTripped(){
+  return db.limitJpy>0 && yen(db.spentUsd)>=db.limitJpy;
+}
 
 async function sendMsg(){
   if(state.busy)return;
@@ -401,15 +472,21 @@ async function sendMsg(){
   const text=input.value.trim();
   if(!text)return;
   if(!db.apiKey){toast("先に設定でAPIキーを入れてね");go("settings");return;}
+  if(breakerTripped()){showErr("上限ブレーカーが作動中（合計 ¥"+yen(db.spentUsd)+" / 上限 ¥"+db.limitJpy+"）。\n設定で上限を上げるか、メーターをリセットしてね。");return;}
   const v=db.conversations.find(x=>x.id===state.currentConvo);
-  const c=db.companions.find(x=>x.id===v.companionId);
   v.messages.push({role:"user",content:text});
   if(!v.title)v.title=text.slice(0,30);
   v.updatedAt=Date.now();save();
   input.value="";input.style.height="auto";
-  renderChat();
+  await requestReply();
+}
+
+async function requestReply(){
+  const v=db.conversations.find(x=>x.id===state.currentConvo);
+  const c=db.companions.find(x=>x.id===v.companionId);
   state.busy=true;
   document.getElementById("ch-send").disabled=true;
+  renderChat();
   const log=document.getElementById("chat-log");
   const tip=document.createElement("div");
   tip.className="typing";tip.innerHTML="<span></span><span></span><span></span>";
@@ -418,7 +495,7 @@ async function sendMsg(){
     const r=await apiPost(db.apiKey,{
       model:c.model,
       max_tokens:4096,
-      system:c.prompt||undefined,
+      system:buildSystem(c),
       messages:v.messages.map(m=>({role:m.role,content:m.content}))
     });
     tip.remove();
@@ -430,22 +507,54 @@ async function sendMsg(){
       else if(r.status===429)jp="ちょっと混んでるみたい。少し待ってからもう一度送ってね。";
       else if(r.status===400&&/credit|billing/i.test(emsg))jp="残高が足りないみたい。Anthropicのコンソールでチャージを確認してね。";
       showErr(jp+"\n("+emsg+")");
-      v.messages.pop();save();
       return;
     }
     const reply=(r.data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
-    v.messages.push({role:"assistant",content:reply||"（返事が空でした）"});
+    /* お財布計算 */
+    const u=r.data.usage||{};
+    const p=priceOf(c.model);
+    const costUsd=((u.input_tokens||0)*p.i+(u.output_tokens||0)*p.o+(u.cache_creation_input_tokens||0)*p.i*1.25+(u.cache_read_input_tokens||0)*p.i*0.1)/1e6;
+    db.spentUsd+=costUsd;
+    v.messages.push({role:"assistant",content:reply||"（返事が空でした）",costUsd:costUsd});
     v.updatedAt=Date.now();save();
     renderChat();
+    if(breakerTripped()){showErr("お知らせ: 合計が上限（¥"+db.limitJpy+"）に届いたよ。次の送信は止まります。");}
   }catch(e){
     tip.remove();
     showErr("通信できなかったみたい。\n【詳細】"+(e.name||"")+": "+(e.message||e));
-    v.messages.pop();save();
   }finally{
     state.busy=false;
     document.getElementById("ch-send").disabled=false;
+    renderChat();
   }
 }
+
+function editMsg(i){
+  if(state.busy)return;
+  const v=db.conversations.find(x=>x.id===state.currentConvo);
+  const m=v.messages[i];
+  if(!m||m.role!=="user")return;
+  if(!confirm("この発言を編集する？（この発言より後のやりとりは消えて、お返事が作り直されるよ）"))return;
+  const nt=prompt("編集してね",m.content);
+  if(nt===null)return;
+  const text=nt.trim();
+  if(!text){toast("空っぽにはできないよ");return;}
+  m.content=text;
+  v.messages=v.messages.slice(0,i+1);
+  v.updatedAt=Date.now();save();
+  requestReply();
+}
+
+function regen(){
+  if(state.busy)return;
+  const v=db.conversations.find(x=>x.id===state.currentConvo);
+  if(!v.messages.length||v.messages[v.messages.length-1].role!=="assistant")return;
+  if(!confirm("最後のお返事を言い直してもらう？（今のお返事は消えるよ）"))return;
+  v.messages.pop();
+  save();
+  requestReply();
+}
+
 function showErr(t){
   const log=document.getElementById("chat-log");
   const d=document.createElement("div");
@@ -453,12 +562,6 @@ function showErr(t){
   log.appendChild(d);log.scrollTop=log.scrollHeight;
 }
 
-/* ================= 設定 ================= */
-function saveKey(){
-  db.apiKey=document.getElementById("s-key").value.replace(/\s+/g,"");
-  document.getElementById("s-key").value=db.apiKey;
-  save();toast("鍵を保存したよ");
-}
 /* ================= API呼び出し（fetch→XHRの二段構え） ================= */
 function apiXHR(key,bodyObj){
   return new Promise((resolve,reject)=>{
@@ -474,7 +577,7 @@ function apiXHR(key,bodyObj){
         resolve({ok:x.status>=200&&x.status<300,status:x.status,data:d});
       };
       x.onerror=()=>reject(new Error("XHRも失敗"));
-      x.timeout=60000;
+      x.timeout=120000;
       x.ontimeout=()=>reject(new Error("時間切れ"));
       x.send(JSON.stringify(bodyObj));
     }catch(e){reject(e);}
@@ -495,17 +598,16 @@ async function apiPost(key,bodyObj){
     const data=await res.json().catch(()=>({}));
     return {ok:res.ok,status:res.status,data};
   }catch(e){
-    /* fetchがダメならXHRで再挑戦 */
     return await apiXHR(key,bodyObj);
   }
 }
 
+/* ================= 接続テスト ================= */
 async function testConnection(){
   const out=document.getElementById("s-test-result");
   const key=(document.getElementById("s-key").value||db.apiKey).replace(/\s+/g,"");
   let report=[];
   const show=()=>{out.textContent=report.join("\n");};
-  /* 検査A: 外の世界へのfetchが一般に通るか */
   report.push("検査A: 一般サイトへの通信…");show();
   try{
     await fetch("https://www.google.com/generate_204",{method:"GET",mode:"no-cors"});
@@ -514,7 +616,6 @@ async function testConnection(){
     report[report.length-1]="❌ 検査A: 一般サイトへも通信不可 ("+(e.message||e)+")";
   }
   show();
-  /* 検査B: Anthropicへのfetch */
   report.push("検査B: Anthropicへの通信…");show();
   try{
     await fetch("https://api.anthropic.com/",{method:"GET",mode:"no-cors"});
@@ -523,7 +624,6 @@ async function testConnection(){
     report[report.length-1]="❌ 検査B: Anthropicへのfetch不可 ("+(e.message||e)+")";
   }
   show();
-  /* 検査C: 本番のお願い（fetch→XHR二段構え） */
   if(!key){report.push("⚠️ 検査C: 鍵が未入力のためスキップ");show();return;}
   if(!key.startsWith("sk-ant-")){report.push("⚠️ 検査C: 鍵が sk-ant- で始まっていない");show();return;}
   report.push("検査C: 鍵をつけて本番のお願い…");show();
@@ -535,6 +635,23 @@ async function testConnection(){
     report[report.length-1]="❌ 検査C: fetchもXHRも失敗 ("+(e.message||e)+")";
   }
   show();
+}
+
+/* ================= 設定 ================= */
+function saveKey(){
+  db.apiKey=document.getElementById("s-key").value.replace(/\s+/g,"");
+  document.getElementById("s-key").value=db.apiKey;
+  save();toast("鍵を保存したよ");
+}
+function saveLimit(){
+  const n=parseInt(document.getElementById("s-limit").value,10);
+  db.limitJpy=(isNaN(n)||n<0)?0:n;
+  save();
+  toast(db.limitJpy?("上限を ¥"+db.limitJpy+" にしたよ"):"上限なしにしたよ");
+}
+function resetSpent(){
+  if(!confirm("使用量メーターをゼロに戻す？（実際の請求とは関係ない、アプリ内の記録だけだよ）"))return;
+  db.spentUsd=0;save();renderUsage();toast("ゼロに戻したよ");
 }
 function exportData(){
   const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
@@ -553,7 +670,10 @@ function importData(ev){
       const d=JSON.parse(r.result);
       if(!d.companions)throw 0;
       if(!confirm("今のデータをファイルの内容で置き換えます。いい？"))return;
-      db=d;save();toast("読み込んだよ");go("home");
+      db=d;
+      if(typeof db.spentUsd!=="number")db.spentUsd=0;
+      if(typeof db.limitJpy!=="number")db.limitJpy=0;
+      save();toast("読み込んだよ");go("home");
     }catch(e){toast("このファイルは読めなかった…");}
   };
   r.readAsText(f);
