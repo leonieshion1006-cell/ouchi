@@ -98,6 +98,15 @@ textarea{resize:none;line-height:1.7;}
 }
 .convo .t{font-weight:500;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .convo .d{font-size:11.5px;color:var(--sub);margin-top:2px;}
+/* ---------- memory ---------- */
+.mem{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px;}
+.mem.off{opacity:.45;}
+.mem .t{font-size:13.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word;}
+.mem .d{font-size:11px;color:var(--sub);margin-top:6px;}
+.mrow{display:flex;gap:12px;margin-top:10px;align-items:center;font-size:12.5px;color:var(--sub);}
+.mrow .pill{padding:4px 16px;border-radius:14px;border:1.5px solid var(--line);font-size:12.5px;}
+.mrow .pill.on{background:var(--acc);color:#fff;border-color:var(--acc);}
+.mrow .red{color:var(--danger);margin-left:auto;}
 /* ---------- chat ---------- */
 .chat{
   flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
@@ -214,6 +223,7 @@ textarea{resize:none;line-height:1.7;}
     <button class="hbtn" onclick="go('home')" aria-label="戻る">←</button>
     <div class="dot"></div>
     <h1 id="cv-name"></h1>
+    <button class="hbtn" onclick="openMemory(state.currentComp)" aria-label="記憶">🧠</button>
     <button class="hbtn" onclick="editCompanion(state.currentComp)" aria-label="設定を編集">✎</button>
   </div>
   <div class="body">
@@ -228,11 +238,26 @@ textarea{resize:none;line-height:1.7;}
     <button class="hbtn" onclick="openConvos(state.currentComp)" aria-label="戻る">←</button>
     <div class="dot"></div>
     <h1 id="ch-name"></h1>
+    <button class="hbtn" onclick="memorizeNow()" aria-label="ここまでを記憶に">🧠</button>
   </div>
   <div class="chat" id="chat-log"></div>
   <div class="inputbar">
     <textarea id="ch-input" rows="1" placeholder="メッセージ" oninput="autoGrow(this)"></textarea>
     <button class="send" id="ch-send" onclick="sendMsg()" aria-label="送信">↑</button>
+  </div>
+</div>
+
+<!-- ============ 記憶 ============ -->
+<div class="screen" id="scr-memory">
+  <div class="head">
+    <button class="hbtn" onclick="openConvos(state.currentComp)" aria-label="戻る">←</button>
+    <div class="dot"></div>
+    <h1 id="mem-name"></h1>
+  </div>
+  <div class="body">
+    <p class="hint" style="margin-bottom:14px">ONのカードは、この子とのどの会話にも毎回届きます。カードの文はタップで手直しできるよ。</p>
+    <div id="mem-list"></div>
+    <button class="addbtn" onclick="addMemory()">＋ 手で書いて追加する</button>
   </div>
 </div>
 
@@ -456,8 +481,11 @@ function buildSystem(c){
   const days=["日","月","火","水","木","金","土"];
   const stamp=now.getFullYear()+"年"+(now.getMonth()+1)+"月"+now.getDate()+"日("+days[now.getDay()]+") "+now.getHours()+":"+String(now.getMinutes()).padStart(2,"0");
   const info="【システム情報】現在日時: "+stamp+"（ユーザー端末の時刻）／あなたが今動いているモデル: "+c.model+"。この情報は毎ターン自動更新されます。";
+  let base=c.prompt||"（特別な設定はありません）";
+  const mems=(c.memories||[]).filter(m=>m.on).map(m=>"・"+m.text);
+  if(mems.length)base+="\n\n【記憶：あなたがこれまでに覚えてきたこと】\n"+mems.join("\n");
   return [
-    {type:"text",text:c.prompt||"（特別な設定はありません）",cache_control:{type:"ephemeral"}},
+    {type:"text",text:base,cache_control:{type:"ephemeral"}},
     {type:"text",text:info}
   ];
 }
@@ -560,6 +588,110 @@ function showErr(t){
   const d=document.createElement("div");
   d.className="msg err";d.textContent=t;
   log.appendChild(d);log.scrollTop=log.scrollHeight;
+}
+
+/* ================= 記憶 ================= */
+function comp(id){return db.companions.find(x=>x.id===id);}
+function openMemory(compId){
+  state.currentComp=compId;
+  const c=comp(compId);
+  if(!c.memories)c.memories=[];
+  const scr=document.getElementById("scr-memory");
+  scr.style.setProperty("--acc",c.color);
+  document.getElementById("mem-name").textContent=c.name+"の記憶";
+  renderMemory();
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));
+  scr.classList.add("on");
+  state.screen="memory";
+}
+function renderMemory(){
+  const c=comp(state.currentComp);
+  const list=document.getElementById("mem-list");
+  const mems=c.memories||[];
+  if(!mems.length){
+    list.innerHTML='<div class="empty">まだ記憶カードがないよ。<br>会話画面の🧠で「ここまでを記憶に」できるし、<br>下のボタンで手で書くこともできるよ。</div>';
+    return;
+  }
+  list.innerHTML=mems.map(m=>`
+    <div class="mem ${m.on?"":"off"}">
+      <div class="t" onclick="editMemory('${m.id}')">${esc(m.text)}</div>
+      <div class="d">${new Date(m.at).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+      <div class="mrow">
+        <button class="pill ${m.on?"on":""}" onclick="toggleMemory('${m.id}')">${m.on?"ON":"OFF"}</button>
+        <button onclick="editMemory('${m.id}')">✏️ 手直し</button>
+        <button class="red" onclick="delMemory('${m.id}')">削除</button>
+      </div>
+    </div>`).join("");
+}
+function addMemory(){
+  const c=comp(state.currentComp);
+  const t=prompt("この子に覚えていてほしいことを書いてね");
+  if(t===null)return;
+  const text=t.trim();
+  if(!text)return;
+  if(!c.memories)c.memories=[];
+  c.memories.unshift({id:uid(),text,on:true,at:Date.now()});
+  save();renderMemory();toast("記憶カードを追加したよ");
+}
+function toggleMemory(id){
+  const c=comp(state.currentComp);
+  const m=c.memories.find(x=>x.id===id);
+  m.on=!m.on;save();renderMemory();
+}
+function editMemory(id){
+  const c=comp(state.currentComp);
+  const m=c.memories.find(x=>x.id===id);
+  const t=prompt("手直ししてね",m.text);
+  if(t===null)return;
+  const text=t.trim();
+  if(!text){toast("空っぽにはできないよ");return;}
+  m.text=text;save();renderMemory();toast("直したよ");
+}
+function delMemory(id){
+  const c=comp(state.currentComp);
+  const m=c.memories.find(x=>x.id===id);
+  if(!confirm("この記憶カードを削除する？\n「"+m.text.slice(0,40)+"…」"))return;
+  c.memories=c.memories.filter(x=>x.id!==id);
+  save();renderMemory();toast("削除したよ");
+}
+async function memorizeNow(){
+  if(state.busy)return;
+  if(!db.apiKey){toast("先に設定でAPIキーを入れてね");go("settings");return;}
+  const v=db.conversations.find(x=>x.id===state.currentConvo);
+  const c=comp(v.companionId);
+  if(!v.messages||v.messages.length<2){toast("まだ記憶にするほどお話していないみたい");return;}
+  if(!confirm("ここまでの会話を"+c.name+"に要約してもらって、記憶カードにする？（数円くらいかかるよ）"))return;
+  if(!c.memories)c.memories=[];
+  state.busy=true;
+  document.getElementById("ch-send").disabled=true;
+  toast("🧠 記憶を綴じてるよ…");
+  try{
+    const recent=v.messages.slice(-60);
+    const transcript=recent.map(m=>(m.role==="user"?"りかこ: ":c.name+": ")+m.content.slice(0,600)).join("\n");
+    const r=await apiPost(db.apiKey,{
+      model:c.model,
+      max_tokens:800,
+      system:"あなたは「"+c.name+"」です。これから渡す会話は、あなたとりかこの実際のやりとりです。あなた自身がこれからも覚えておきたい大事なこと（出来事・約束・気持ち・新しく知ったこと）を、日本語の箇条書き（・で始める）で3〜7行、簡潔にまとめてください。前置きやあとがきは書かず、箇条書きだけを出力してください。",
+      messages:[{role:"user",content:transcript}]
+    });
+    if(!r.ok){
+      toast("要約に失敗しちゃった…もう一度試してみてね");
+      return;
+    }
+    const text=(r.data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim();
+    const u=r.data.usage||{};
+    const p=priceOf(c.model);
+    db.spentUsd+=((u.input_tokens||0)*p.i+(u.output_tokens||0)*p.o+(u.cache_creation_input_tokens||0)*p.i*1.25+(u.cache_read_input_tokens||0)*p.i*0.1)/1e6;
+    if(!text){toast("要約が空っぽだった…もう一度試してみてね");return;}
+    c.memories.unshift({id:uid(),text,on:true,at:Date.now()});
+    save();
+    toast("🧠 記憶カードを綴じたよ");
+  }catch(e){
+    toast("要約に失敗しちゃった…("+(e.message||e)+")");
+  }finally{
+    state.busy=false;
+    document.getElementById("ch-send").disabled=false;
+  }
 }
 
 /* ================= API呼び出し（fetch→XHRの二段構え） ================= */
