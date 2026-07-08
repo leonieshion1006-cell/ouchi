@@ -182,8 +182,10 @@ textarea{resize:none;line-height:1.7;}
     <button class="hbtn" onclick="go('settings')" aria-label="設定">⚙︎</button>
   </div>
   <div class="body">
+    <input id="search-box" placeholder="🔎 みんなとの会話をぜんぶ探す" oninput="crossSearch()" style="margin-bottom:14px">
+    <div id="search-results"></div>
     <div id="home-list"></div>
-    <button class="addbtn" onclick="editCompanion(null)">＋ 新しい子を迎える</button>
+    <button class="addbtn" id="home-add" onclick="editCompanion(null)">＋ 新しい子を迎える</button>
   </div>
 </div>
 
@@ -348,7 +350,13 @@ function go(name){
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));
   document.getElementById("scr-"+name).classList.add("on");
   state.screen=name;
-  if(name==="home")renderHome();
+  if(name==="home"){
+    const sb=document.getElementById("search-box");
+    if(sb){sb.value="";document.getElementById("search-results").innerHTML="";
+      document.getElementById("home-list").style.display="";
+      document.getElementById("home-add").style.display="";}
+    renderHome();
+  }
   if(name==="settings"){
     document.getElementById("s-key").value=db.apiKey||"";
     document.getElementById("s-limit").value=db.limitJpy||"";
@@ -601,6 +609,45 @@ function showErr(t){
   const d=document.createElement("div");
   d.className="msg err";d.textContent=t;
   log.appendChild(d);log.scrollTop=log.scrollHeight;
+}
+
+/* ================= 横断検索 ================= */
+function crossSearch(){
+  const q=document.getElementById("search-box").value.trim().toLowerCase();
+  const res=document.getElementById("search-results");
+  const homeList=document.getElementById("home-list");
+  const addBtn=document.getElementById("home-add");
+  if(!q){res.innerHTML="";homeList.style.display="";addBtn.style.display="";return;}
+  homeList.style.display="none";addBtn.style.display="none";
+  const hits=[];
+  for(const v of db.conversations){
+    const c=db.companions.find(x=>x.id===v.companionId);
+    if(!c)continue;
+    for(const m of v.messages){
+      if(m.content.toLowerCase().includes(q)){
+        hits.push({v,c,m});
+        if(hits.length>=50)break;
+      }
+    }
+    if(hits.length>=50)break;
+  }
+  if(!hits.length){
+    res.innerHTML='<div class="empty">「'+esc(q)+'」は見つからなかったよ。</div>';
+    return;
+  }
+  res.innerHTML=hits.map(h=>{
+    const idx=h.m.content.toLowerCase().indexOf(q);
+    const start=Math.max(0,idx-20);
+    let snip=h.m.content.slice(start,start+80);
+    if(start>0)snip="…"+snip;
+    if(start+80<h.m.content.length)snip+="…";
+    const who=h.m.role==="user"?"りかこ":h.c.name;
+    const when=h.m.at?fmtShort(h.m.at):"";
+    return `<button class="convo" style="width:100%;text-align:left;--acc:${h.c.color}" onclick="openChat('${h.v.id}')">
+      <div class="d" style="margin:0 0 2px"><span style="color:${h.c.color};font-weight:700">●</span> ${esc(h.c.name)}のスレ・${who}の発言${when?"・"+when:""}</div>
+      <div class="t" style="white-space:normal;font-size:13.5px">${esc(snip)}</div>
+    </button>`;
+  }).join("")+(hits.length>=50?'<div class="empty">たくさん見つかったから最初の50件だけ表示してるよ。言葉を足して絞ってみてね。</div>':"");
 }
 
 /* ================= 記憶 ================= */
