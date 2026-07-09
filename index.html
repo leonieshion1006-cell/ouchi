@@ -321,6 +321,18 @@ textarea{resize:none;line-height:1.7;}
       <button class="primary" id="s-think" style="margin-top:14px" onclick="toggleThink()">…</button>
     </div>
     <div class="section">
+      <h3>🎒 会話の持ち歩き量</h3>
+      <p>返事のたびに、その子へ「直近なん往復ぶん」の会話を持たせるかを決められます。しぼるほど<b>長いスレでも安く</b>なりますが、範囲より前の話はその場では見えなくなります（🧠記憶カードに綴じたことはずっと覚えています）。</p>
+      <select id="s-turns" style="margin-top:12px" onchange="saveTurns()">
+        <option value="0">ぜんぶ持っていく（いままで通り）</option>
+        <option value="50">直近50往復</option>
+        <option value="30">直近30往復（おすすめ）</option>
+        <option value="16">直近16往復</option>
+        <option value="8">直近8往復</option>
+      </select>
+      <p class="hint">長いスレは「🧠で綴じてから範囲をしぼる」のが、安さと記憶の両立にいちばんおすすめ。</p>
+    </div>
+    <div class="section">
       <h3>おひっこし（バックアップ）</h3>
       <p>みんなの設定と会話をファイルに保存できます。機種変更の前や、ときどきのお守りに。</p>
       <button class="ghost" style="margin-top:12px" onclick="exportData()">ファイルに書き出す</button>
@@ -332,7 +344,7 @@ textarea{resize:none;line-height:1.7;}
       <p>
 ・会話や記憶はぜんぶ<b>このスマホの中だけ</b>に保存されます。VercelやGitHubには送られません。<br><br>
 ・そのかわり、ブラウザのデータを全消去すると一緒に消えます。<b>ときどき「おひっこし」でファイルに書き出す</b>のが一番のお守りです。<br><br>
-・<b>長いスレほど1往復が高くなります</b>（毎回それまでの会話ぜんぶを持っていくため）。スレが長くなってきたら、🧠で記憶に綴じてから新しいスレに移ると、安くて軽くなります。<br><br>
+・<b>長いスレほど1往復が高くなります</b>（それまでの会話を持っていくため）。設定の🎒で持ち歩き量をしぼるか、🧠で記憶に綴じてから新しいスレに移ると、安くて軽くなります。<br><br>
 ・お金がかかるのは「会話」「🧠で綴じる」「💭思考」だけ。検索・編集・記憶の管理・バックアップは0円です。<br><br>
 ・自分の吹き出しをタップすると発言を編集できます。</p>
     </div>
@@ -355,19 +367,69 @@ const PRICE={ /* 100万トークンあたりのドル {入力, 出力} */
   "claude-opus-4-8":{i:5,o:25},
   "claude-haiku-4-5-20251001":{i:1,o:5}
 };
-let db=load();
+let db=normalize(null);
 let state={screen:"home",currentComp:null,currentConvo:null,editing:null,busy:false};
 
-function load(){
-  let d=null;
-  try{d=JSON.parse(localStorage.getItem(KEY));}catch(e){}
+function normalize(d){
   if(!d||!d.companions)d={apiKey:"",companions:[],conversations:[]};
   if(typeof d.spentUsd!=="number")d.spentUsd=0;
   if(typeof d.limitJpy!=="number")d.limitJpy=0;
   if(typeof d.thinkOn!=="boolean")d.thinkOn=false;
+  if(typeof d.sendTurns!=="number")d.sendTurns=0;
   return d;
 }
-function save(){localStorage.setItem(KEY,JSON.stringify(db));}
+
+/* ---- 保存：IndexedDB（localStorageの5MB制限からのお引っ越し先） ---- */
+let idb=null;
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const q=indexedDB.open("ouchi-db",1);
+    q.onupgradeneeded=()=>{q.result.createObjectStore("kv");};
+    q.onsuccess=()=>res(q.result);
+    q.onerror=()=>rej(q.error);
+  });
+}
+function idbGet(k){
+  return new Promise((res,rej)=>{
+    const t=idb.transaction("kv","readonly").objectStore("kv").get(k);
+    t.onsuccess=()=>res(t.result);
+    t.onerror=()=>rej(t.error);
+  });
+}
+function idbSet(k,v){
+  return new Promise((res,rej)=>{
+    const t=idb.transaction("kv","readwrite").objectStore("kv").put(v,k);
+    t.onsuccess=()=>res();
+    t.onerror=()=>rej(t.error);
+  });
+}
+function save(){
+  if(idb){
+    idbSet(KEY,JSON.stringify(db)).catch(e=>toast("保存に失敗したかも…("+((e&&e.message)||e)+")"));
+  }else{
+    try{localStorage.setItem(KEY,JSON.stringify(db));}
+    catch(e){toast("保存できなかった…容量がいっぱいかも。おひっこし（書き出し）をしてね");}
+  }
+}
+async function initStorage(){
+  try{
+    idb=await idbOpen();
+    let raw=await idbGet(KEY);
+    let migrated=false;
+    if(!raw){
+      raw=localStorage.getItem(KEY); /* 初回だけlocalStorageからお引っ越し */
+      if(raw){await idbSet(KEY,raw);migrated=true;}
+    }
+    let d=null;try{d=JSON.parse(raw);}catch(e){}
+    db=normalize(d);
+    if(migrated)setTimeout(()=>toast("データを広いお部屋（IndexedDB）にお引っ越ししたよ"),600);
+  }catch(e){
+    /* IndexedDBが使えない環境では従来どおりlocalStorageで動く */
+    idb=null;
+    let d=null;try{d=JSON.parse(localStorage.getItem(KEY));}catch(_){}
+    db=normalize(d);
+  }
+}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function toast(t){const el=document.getElementById("toast");el.textContent=t;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),2200);}
 function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML;}
@@ -396,6 +458,7 @@ function go(name){
   if(name==="settings"){
     document.getElementById("s-key").value=db.apiKey||"";
     document.getElementById("s-limit").value=db.limitJpy||"";
+    document.getElementById("s-turns").value=String(db.sendTurns||0);
     renderUsage();renderThinkBtn();
   }
 }
@@ -407,6 +470,11 @@ function renderThinkBtn(){
   const b=document.getElementById("s-think");
   b.textContent=db.thinkOn?"💭 思考モード ON（タップでOFF）":"思考モード OFF（タップでON）";
   b.style.background=db.thinkOn?"var(--acc)":"var(--sub)";
+}
+function saveTurns(){
+  db.sendTurns=parseInt(document.getElementById("s-turns").value,10)||0;
+  save();
+  toast(db.sendTurns?("直近"+db.sendTurns+"往復だけ持っていくね"):"ぜんぶ持っていくね");
 }
 function toggleThink(){
   db.thinkOn=!db.thinkOn;save();renderThinkBtn();
@@ -556,6 +624,14 @@ function buildSystem(c){
   ];
 }
 
+function packMessages(msgs){
+  const n=db.sendTurns|0;
+  if(!n||msgs.length<=n*2)return msgs;
+  let arr=msgs.slice(-n*2);
+  while(arr.length&&arr[0].role!=="user")arr=arr.slice(1); /* APIは先頭がuser必須 */
+  return arr;
+}
+
 function breakerTripped(){
   return db.limitJpy>0 && yen(db.spentUsd)>=db.limitJpy;
 }
@@ -590,7 +666,7 @@ async function requestReply(){
       model:c.model,
       max_tokens:db.thinkOn?9000:4096,
       system:buildSystem(c),
-      messages:v.messages.map(m=>({
+      messages:packMessages(v.messages).map(m=>({
         role:m.role,
         content:(m.role==="user"&&m.at)?("【"+fmtFull(m.at)+"】"+m.content):m.content
       }))
@@ -1033,7 +1109,7 @@ function importData(ev){
 }
 
 /* ================= 起動 ================= */
-renderHome();
+initStorage().then(()=>{renderHome();});
 </script>
 </body>
 </html>
