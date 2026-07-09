@@ -238,6 +238,7 @@ textarea{resize:none;line-height:1.7;}
     <button class="hbtn" onclick="go('home')" aria-label="戻る">←</button>
     <div class="dot"></div>
     <h1 id="cv-name"></h1>
+    <button class="hbtn" onclick="openDiary(state.currentComp)" aria-label="日記">📔</button>
     <button class="hbtn" onclick="openMemory(state.currentComp)" aria-label="記憶">🧠</button>
     <button class="hbtn" onclick="editCompanion(state.currentComp)" aria-label="設定を編集">✎</button>
   </div>
@@ -273,6 +274,19 @@ textarea{resize:none;line-height:1.7;}
     <p class="hint" style="margin-bottom:14px">ONのカードは、この子とのどの会話にも毎回届きます。カードの文はタップで手直しできるよ。</p>
     <div id="mem-list"></div>
     <button class="addbtn" onclick="addMemory()">＋ 手で書いて追加する</button>
+  </div>
+</div>
+
+<!-- ============ 日記 ============ -->
+<div class="screen" id="scr-diary">
+  <div class="head">
+    <button class="hbtn" onclick="openConvos(state.currentComp)" aria-label="戻る">←</button>
+    <div class="dot"></div>
+    <h1 id="diary-name"></h1>
+  </div>
+  <div class="body">
+    <button class="primary" style="margin:0 0 16px" onclick="writeDiary()">📔 今日の日記を書いてもらう</button>
+    <div id="diary-list"></div>
   </div>
 </div>
 
@@ -687,6 +701,110 @@ function crossSearch(){
       <div class="t" style="white-space:normal;font-size:13.5px">${esc(snip)}</div>
     </button>`;
   }).join("")+(hits.length>=50?'<div class="empty">たくさん見つかったから最初の50件だけ表示してるよ。言葉を足して絞ってみてね。</div>':"");
+}
+
+/* ================= 日記 ================= */
+function dayKey(t){const d=new Date(t);return d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate()+"("+DAYS[d.getDay()]+")";}
+function openDiary(compId){
+  state.currentComp=compId;
+  const c=comp(compId);
+  if(!c.diary)c.diary=[];
+  const scr=document.getElementById("scr-diary");
+  scr.style.setProperty("--acc",c.color);
+  document.getElementById("diary-name").textContent=c.name+"の日記帳";
+  renderDiary();
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));
+  scr.classList.add("on");
+  state.screen="diary";
+}
+function renderDiary(){
+  const c=comp(state.currentComp);
+  const list=document.getElementById("diary-list");
+  const ds=c.diary||[];
+  if(!ds.length){
+    list.innerHTML='<div class="empty">まだ日記がないよ。<br>その日おしゃべりしたあとに<br>「今日の日記を書いてもらう」を押してね。</div>';
+    return;
+  }
+  list.innerHTML=ds.map(e=>`
+    <div class="mem">
+      <div class="t" style="font-weight:700;font-size:13px;margin-bottom:6px">📔 ${esc(e.day)}</div>
+      <div class="t">${esc(e.text)}</div>
+      <div class="mrow">
+        <button onclick="editDiary('${e.id}')">✏️ 手直し</button>
+        <button class="red" onclick="delDiary('${e.id}')">削除</button>
+      </div>
+    </div>`).join("");
+}
+async function writeDiary(){
+  if(state.busy)return;
+  if(!db.apiKey){toast("先に設定でAPIキーを入れてね");go("settings");return;}
+  const c=comp(state.currentComp);
+  if(!c.diary)c.diary=[];
+  /* その日の発言をスレ横断で集める */
+  const today=dayKey(Date.now());
+  const yesterday=dayKey(Date.now()-86400000);
+  const collect=(dk)=>{
+    const out=[];
+    for(const v of db.conversations){
+      if(v.companionId!==c.id)continue;
+      for(const m of v.messages){
+        if(m.at&&dayKey(m.at)===dk)out.push(m);
+      }
+    }
+    out.sort((a,b)=>a.at-b.at);
+    return out;
+  };
+  let dk=today,msgs=collect(today);
+  if(!msgs.length){dk=yesterday;msgs=collect(yesterday);}
+  if(!msgs.length){toast("今日と昨日の会話が見つからないよ（日時の印つきの会話が対象）");return;}
+  if(c.diary.some(e=>e.day===dk)){
+    if(!confirm(dk+"の日記はもうあるよ。もう1冊書いてもらう？"))return;
+  }else{
+    if(!confirm(dk+"の会話から、"+c.name+"に日記を書いてもらう？（数円くらいかかるよ）"))return;
+  }
+  state.busy=true;
+  toast("📔 日記を書いてるよ…");
+  try{
+    const recent=msgs.slice(-80);
+    const transcript=recent.map(m=>("("+fmtShort(m.at)+") ")+(m.role==="user"?"りかこ: ":c.name+": ")+m.content.slice(0,400)).join("\n");
+    const r=await apiPost(db.apiKey,{
+      model:c.model,
+      max_tokens:1000,
+      system:"あなたは「"+c.name+"」です。これから渡すのは、"+dk+"にあなたとりかこが実際に交わした会話です。あなた自身の視点で、今日の日記を日本語で書いてください。話したこと、感じたこと、りかこへの気持ちを、あなたらしい言葉で。150〜400字くらい。日記の本文だけを出力し、前置きやタイトルは書かないでください。",
+      messages:[{role:"user",content:transcript}]
+    });
+    if(!r.ok){toast("日記が書けなかった…もう一度試してみてね");return;}
+    const text=(r.data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim();
+    const u=r.data.usage||{};
+    const p=priceOf(c.model);
+    db.spentUsd+=((u.input_tokens||0)*p.i+(u.output_tokens||0)*p.o+(u.cache_creation_input_tokens||0)*p.i*1.25+(u.cache_read_input_tokens||0)*p.i*0.1)/1e6;
+    if(!text){toast("日記が空っぽだった…もう一度試してみてね");return;}
+    c.diary.unshift({id:uid(),day:dk,text,at:Date.now()});
+    save();
+    renderDiary();
+    toast("📔 日記を綴じたよ");
+  }catch(e){
+    toast("日記が書けなかった…("+(e.message||e)+")");
+  }finally{
+    state.busy=false;
+  }
+}
+function editDiary(id){
+  const c=comp(state.currentComp);
+  const e=c.diary.find(x=>x.id===id);
+  const t=prompt("手直ししてね",e.text);
+  if(t===null)return;
+  const text=t.trim();
+  if(!text){toast("空っぽにはできないよ");return;}
+  e.text=text;save();renderDiary();toast("直したよ");
+}
+function delDiary(id){
+  const c=comp(state.currentComp);
+  const e=c.diary.find(x=>x.id===id);
+  if(!confirm(e.day+"の日記を削除する？"))return;
+  if(!confirm("ほんとうにいい？（元に戻せないよ）"))return;
+  c.diary=c.diary.filter(x=>x.id!==id);
+  save();renderDiary();toast("削除したよ");
 }
 
 /* ================= 記憶 ================= */
