@@ -29,7 +29,12 @@ body{
   font-size:15px;
   line-height:1.7;
   overscroll-behavior:none;
+  transition:background 1.2s ease;
 }
+/* ---------- 時間帯の光 ---------- */
+body[data-tod="morning"]{--paper:#F7F5EC;}
+body[data-tod="evening"]{--paper:#F7EFE2;--line:#EBDFCC;}
+body[data-tod="night"]{--paper:#EAE7E4;--card:#F8F7F5;}
 button{font-family:inherit;border:none;background:none;cursor:pointer;color:inherit;}
 input,textarea,select{
   font-family:inherit;font-size:15px;color:var(--ink);
@@ -113,7 +118,7 @@ textarea{resize:none;line-height:1.7;}
   padding:16px 14px 8px;display:flex;flex-direction:column;gap:12px;
   background:color-mix(in srgb, var(--acc) 3%, var(--paper));
 }
-.msg{max-width:82%;padding:11px 15px;border-radius:20px;font-size:15px;
+.msg{max-width:82%;padding:11px 15px;border-radius:20px;font-size:var(--fs,15px);
   line-height:1.75;white-space:pre-wrap;word-break:break-word;
   font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Zen Maru Gothic",sans-serif;}
 .msg.user{
@@ -130,6 +135,12 @@ textarea{resize:none;line-height:1.7;}
   border:1.5px solid color-mix(in srgb, var(--danger) 30%, var(--line));
   color:var(--danger);font-size:13px;max-width:92%;
 }
+.msg.info{
+  align-self:center;background:color-mix(in srgb, var(--acc) 8%, var(--card));
+  border:1.5px solid color-mix(in srgb, var(--acc) 32%, var(--line));
+  color:var(--acc);font-size:13px;max-width:92%;white-space:pre-wrap;
+}
+#ch-input{font-size:var(--fs,15px);}
 .cost{align-self:flex-start;font-size:10.5px;color:var(--sub);margin:-8px 0 0 8px;}
 .cost.r{align-self:flex-end;margin:-8px 8px 0 0;}
 .think{
@@ -333,6 +344,16 @@ textarea{resize:none;line-height:1.7;}
       <p class="hint">長いスレは「🧠で綴じてから範囲をしぼる」のが、安さと記憶の両立にいちばんおすすめ。</p>
     </div>
     <div class="section">
+      <h3>🔠 文字サイズ</h3>
+      <p>会話の吹き出しと入力欄の文字の大きさを変えられます。</p>
+      <select id="s-font" style="margin-top:12px" onchange="saveFont()">
+        <option value="13.5">小</option>
+        <option value="15">ふつう</option>
+        <option value="17">大</option>
+        <option value="19">特大</option>
+      </select>
+    </div>
+    <div class="section">
       <h3>おひっこし（バックアップ）</h3>
       <p>みんなの設定と会話をファイルに保存できます。機種変更の前や、ときどきのお守りに。</p>
       <button class="ghost" style="margin-top:12px" onclick="exportData()">ファイルに書き出す</button>
@@ -376,6 +397,7 @@ function normalize(d){
   if(typeof d.limitJpy!=="number")d.limitJpy=0;
   if(typeof d.thinkOn!=="boolean")d.thinkOn=false;
   if(typeof d.sendTurns!=="number")d.sendTurns=0;
+  if(typeof d.fontPx!=="number")d.fontPx=15;
   return d;
 }
 
@@ -459,6 +481,7 @@ function go(name){
     document.getElementById("s-key").value=db.apiKey||"";
     document.getElementById("s-limit").value=db.limitJpy||"";
     document.getElementById("s-turns").value=String(db.sendTurns||0);
+    document.getElementById("s-font").value=String(db.fontPx||15);
     renderUsage();renderThinkBtn();
   }
 }
@@ -632,6 +655,48 @@ function packMessages(msgs){
   return arr;
 }
 
+/* ---------- 時間帯の光 ---------- */
+function applyDaylight(){
+  const h=new Date().getHours();
+  const tod=(h>=19||h<5)?"night":(h<10)?"morning":(h<16)?"day":"evening";
+  if(document.body.dataset.tod===tod)return;
+  document.body.dataset.tod=tod;
+  const colors={morning:"#F7F5EC",day:"#F4F2EF",evening:"#F7EFE2",night:"#EAE7E4"};
+  const m=document.querySelector('meta[name="theme-color"]');
+  if(m)m.content=colors[tod];
+}
+
+/* ---------- 文字サイズ ---------- */
+function applyFont(){
+  document.body.style.setProperty("--fs",(db.fontPx||15)+"px");
+}
+function saveFont(){
+  db.fontPx=parseFloat(document.getElementById("s-font").value)||15;
+  save();applyFont();toast("文字サイズを変えたよ");
+}
+
+/* ---------- スレの長さおしらせ ---------- */
+function showInfo(t){
+  const log=document.getElementById("chat-log");
+  if(!log)return;
+  const d=document.createElement("div");
+  d.className="msg info";d.textContent=t;
+  log.appendChild(d);log.scrollTop=log.scrollHeight;
+}
+function threadNotice(v,u){
+  const inTok=(u.input_tokens||0)+(u.cache_read_input_tokens||0)+(u.cache_creation_input_tokens||0);
+  let lv=0;
+  if(inTok>=60000)lv=3;else if(inTok>=30000)lv=2;else if(inTok>=15000)lv=1;
+  if(lv<=(v.noticeLv||0))return;
+  v.noticeLv=lv;
+  const turns=Math.floor(v.messages.length/2);
+  let msg="📏 このスレ、だいぶ育ってきたよ（約"+turns+"往復・持ち込み約"+Math.round(inTok/1000)+"千トークン）。";
+  if(lv===1)msg+="\nそろそろ🧠で綴じておくと安心。🎒で範囲をしぼるか新しいスレに移ると、お財布にもやさしいよ。";
+  else if(lv===2)msg+="\n1往復のお値段がけっこう上がってきてます。🧠で綴じどきかも。";
+  else msg+="\nかなり大きな持ち込み量！🧠で綴じて、身軽にしてあげるのがおすすめ。";
+  showInfo(msg);
+}
+
 function breakerTripped(){
   return db.limitJpy>0 && yen(db.spentUsd)>=db.limitJpy;
 }
@@ -696,6 +761,7 @@ async function requestReply(){
     v.messages.push(newMsg);
     v.updatedAt=Date.now();save();
     renderChat();
+    threadNotice(v,u);
     if(breakerTripped()){showErr("お知らせ: 合計が上限（¥"+db.limitJpy+"）に届いたよ。次の送信は止まります。");}
   }catch(e){
     tip.remove();
@@ -1109,7 +1175,12 @@ function importData(ev){
 }
 
 /* ================= 起動 ================= */
-initStorage().then(()=>{renderHome();});
+initStorage().then(()=>{
+  applyFont();
+  applyDaylight();
+  setInterval(applyDaylight,60000);
+  renderHome();
+});
 </script>
 </body>
 </html>
