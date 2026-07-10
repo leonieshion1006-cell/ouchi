@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ふくちゃんのごはん帳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --flour:#F7F1E4;        /* 粉 */
+  --dough:#F0E3C8;        /* 生地 */
+  --crust:#7A5233;        /* 焼き色 */
+  --crust-deep:#57391F;   /* こげ茶 */
+  --honey:#DFA84E;        /* はちみつ */
+  --bubble:#FFFDF7;       /* 気泡 */
+  --hungry:#C96F4A;       /* おなかすいた色 */
+  --ok:#8FA86B;           /* ごきげん色 */
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  font-family:'Zen Maru Gothic',sans-serif;
+  background:var(--flour);
+  color:var(--crust-deep);
+  display:flex;flex-direction:column;align-items:center;
+  padding:20px 16px 48px;
+  overflow-x:hidden;
+}
+/* ふわふわ気泡の背景 */
+.bg-bubbles{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+.bg-bubbles span{
+  position:absolute;bottom:-40px;border-radius:50%;
+  background:rgba(223,168,78,0.10);
+  animation:rise linear infinite;
+}
+@keyframes rise{
+  from{transform:translateY(0) scale(1);opacity:0;}
+  10%{opacity:1;}
+  to{transform:translateY(-110vh) scale(1.15);opacity:0;}
+}
+@media (prefers-reduced-motion: reduce){
+  .bg-bubbles span{animation:none;display:none;}
+  *{transition:none !important;animation:none !important;}
+}
+main{position:relative;z-index:1;width:100%;max-width:420px;display:flex;flex-direction:column;gap:18px;}
+
+header{text-align:center;padding-top:6px;}
+header h1{font-size:1.45rem;font-weight:700;letter-spacing:.06em;}
+header p{font-size:.8rem;color:var(--crust);opacity:.75;margin-top:2px;}
+
+/* ふくちゃん本体カード */
+.jar-card{
+  background:var(--bubble);
+  border-radius:28px;
+  padding:26px 20px 22px;
+  box-shadow:0 6px 24px rgba(87,57,31,0.10);
+  text-align:center;
+}
+.jar-wrap{display:flex;justify-content:center;}
+#fukuSvg{width:180px;height:200px;}
+.speech{
+  margin-top:10px;font-size:1.02rem;font-weight:700;min-height:1.6em;
+}
+.elapsed{
+  margin-top:6px;font-size:.9rem;color:var(--crust);
+}
+.elapsed strong{font-size:1.15rem;}
+.gauge{
+  margin:14px auto 0;width:82%;height:12px;border-radius:999px;
+  background:var(--dough);overflow:hidden;
+}
+.gauge-fill{
+  height:100%;border-radius:999px;background:var(--ok);
+  width:0%;transition:width .6s ease,background .6s ease;
+}
+.gauge-label{font-size:.72rem;color:var(--crust);opacity:.7;margin-top:5px;}
+
+/* ごはんボタン */
+.feed-btn{
+  width:100%;border:none;cursor:pointer;
+  background:var(--honey);color:#fff;
+  font-family:inherit;font-size:1.15rem;font-weight:700;letter-spacing:.05em;
+  padding:16px;border-radius:999px;
+  box-shadow:0 4px 0 #B8863C;
+  transition:transform .08s ease,box-shadow .08s ease;
+}
+.feed-btn:active{transform:translateY(3px);box-shadow:0 1px 0 #B8863C;}
+.feed-btn:focus-visible{outline:3px solid var(--crust);outline-offset:3px;}
+
+/* 設定 */
+.card{
+  background:var(--bubble);border-radius:20px;padding:16px 18px;
+  box-shadow:0 3px 14px rgba(87,57,31,0.07);
+}
+.card h2{font-size:.92rem;font-weight:700;margin-bottom:10px;}
+.mode-row{display:flex;gap:8px;}
+.mode-btn{
+  flex:1;border:2px solid var(--dough);background:#fff;
+  font-family:inherit;font-size:.82rem;font-weight:500;color:var(--crust);
+  padding:9px 4px;border-radius:14px;cursor:pointer;
+  transition:all .15s ease;
+}
+.mode-btn.active{border-color:var(--honey);background:#FBF0DA;font-weight:700;color:var(--crust-deep);}
+.mode-btn:focus-visible{outline:3px solid var(--crust);outline-offset:2px;}
+.custom-row{display:none;margin-top:10px;align-items:center;gap:8px;font-size:.85rem;}
+.custom-row.show{display:flex;}
+.custom-row input{
+  width:70px;font-family:inherit;font-size:1rem;text-align:center;
+  border:2px solid var(--dough);border-radius:10px;padding:6px;
+}
+.custom-row input:focus-visible{outline:3px solid var(--honey);outline-offset:1px;}
+
+/* 履歴 */
+.history-list{list-style:none;display:flex;flex-direction:column;gap:8px;}
+.history-item{
+  display:flex;align-items:center;justify-content:space-between;
+  background:#fff;border-radius:14px;padding:10px 14px;font-size:.86rem;
+}
+.history-item .date{font-weight:500;}
+.history-item .gap{font-size:.72rem;color:var(--crust);opacity:.7;margin-left:8px;}
+.del-btn{
+  border:none;background:none;cursor:pointer;font-size:.95rem;
+  color:var(--crust);opacity:.45;padding:4px 6px;border-radius:8px;
+}
+.del-btn:hover{opacity:1;background:var(--dough);}
+.del-btn:focus-visible{outline:2px solid var(--crust);opacity:1;}
+.empty-msg{font-size:.85rem;color:var(--crust);opacity:.7;text-align:center;padding:8px 0;}
+
+.save-status{
+  text-align:center;font-size:.76rem;color:var(--crust);opacity:.75;
+}
+.save-status.warn{
+  color:#fff;background:var(--hungry);opacity:1;
+  padding:8px 14px;border-radius:14px;font-weight:500;
+}
+
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(80px);
+  background:var(--crust-deep);color:#fff;font-size:.88rem;font-weight:500;
+  padding:10px 20px;border-radius:999px;opacity:0;
+  transition:all .35s cubic-bezier(.2,.9,.3,1.2);z-index:10;pointer-events:none;
+}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+<div class="bg-bubbles" aria-hidden="true"></div>
+
+<main>
+  <header>
+    <h1>🍞 ふくちゃんのごはん帳</h1>
+    <p>サワードウスターターの餌やり記録</p>
+  </header>
+
+  <section class="jar-card" aria-live="polite">
+    <div class="jar-wrap">
+      <svg id="fukuSvg" viewBox="0 0 180 200" role="img" aria-label="ふくちゃんの様子">
+        <!-- 瓶のふた -->
+        <rect x="52" y="18" width="76" height="16" rx="7" fill="#C9A87C"/>
+        <rect x="58" y="30" width="64" height="8" rx="4" fill="#B8946A"/>
+        <!-- 瓶ガラス -->
+        <path d="M50 42 Q46 42 46 52 L46 168 Q46 186 66 186 L114 186 Q134 186 134 168 L134 52 Q134 42 130 42 Z"
+              fill="rgba(255,255,255,0.65)" stroke="#D8C9AE" stroke-width="3"/>
+        <!-- 生地(高さがJSで変わる) -->
+        <clipPath id="jarClip">
+          <path d="M50 42 Q46 42 46 52 L46 168 Q46 186 66 186 L114 186 Q134 186 134 168 L134 52 Q134 42 130 42 Z"/>
+        </clipPath>
+        <g clip-path="url(#jarClip)">
+          <rect id="doughBody" x="46" y="95" width="88" height="95" fill="#F0E3C8"/>
+          <path id="doughTop" d="M46 95 Q60 88 75 95 T104 95 T134 95 L134 190 L46 190 Z" fill="#F0E3C8"/>
+          <!-- 気泡 -->
+          <g id="doughBubbles" fill="rgba(255,255,255,0.9)">
+            <circle cx="65" cy="130" r="4"/>
+            <circle cx="95" cy="150" r="5"/>
+            <circle cx="115" cy="125" r="3.5"/>
+            <circle cx="80" cy="165" r="3"/>
+          </g>
+        </g>
+        <!-- 顔 -->
+        <g id="face">
+          <g id="eyesHappy">
+            <path d="M72 122 Q76 117 80 122" stroke="#57391F" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <path d="M100 122 Q104 117 108 122" stroke="#57391F" stroke-width="3" fill="none" stroke-linecap="round"/>
+          </g>
+          <g id="eyesOpen" style="display:none">
+            <circle cx="76" cy="121" r="3.4" fill="#57391F"/>
+            <circle cx="104" cy="121" r="3.4" fill="#57391F"/>
+          </g>
+          <g id="eyesSad" style="display:none">
+            <path d="M72 119 Q76 124 80 119" stroke="#57391F" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <path d="M100 119 Q104 124 108 119" stroke="#57391F" stroke-width="3" fill="none" stroke-linecap="round"/>
+          </g>
+          <circle cx="65" cy="132" r="5" fill="#F3B8A0" opacity="0.8"/>
+          <circle cx="115" cy="132" r="5" fill="#F3B8A0" opacity="0.8"/>
+          <path id="mouthSmile" d="M84 133 Q90 139 96 133" stroke="#57391F" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <path id="mouthFlat" d="M84 135 L96 135" stroke="#57391F" stroke-width="3" fill="none" stroke-linecap="round" style="display:none"/>
+          <path id="mouthOpen" d="M84 132 Q90 142 96 132 Q90 136 84 132" stroke="#57391F" stroke-width="2.5" fill="#57391F" style="display:none"/>
+        </g>
+      </svg>
+    </div>
+    <p class="speech" id="speech">…</p>
+    <p class="elapsed" id="elapsed">まだ記録がないよ</p>
+    <div class="gauge"><div class="gauge-fill" id="gaugeFill"></div></div>
+    <p class="gauge-label" id="gaugeLabel">おなかすきメーター</p>
+  </section>
+
+  <button class="feed-btn" id="feedBtn">🥣 ごはんあげた！</button>
+
+  <section class="card">
+    <h2>⏰ ごはんの間隔</h2>
+    <div class="mode-row" role="group" aria-label="餌やり間隔の選択">
+      <button class="mode-btn" data-hours="24">常温<br>(24時間)</button>
+      <button class="mode-btn" data-hours="168">冷蔵庫<br>(7日)</button>
+      <button class="mode-btn" data-hours="custom">じぶんで<br>きめる</button>
+    </div>
+    <div class="custom-row" id="customRow">
+      <input type="number" id="customHours" min="1" max="720" value="48">
+      <span>時間ごと</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>📖 これまでの記録</h2>
+    <ul class="history-list" id="historyList"></ul>
+    <p class="empty-msg" id="emptyMsg">まだ記録がないよ。最初のごはんをあげてね🌾</p>
+  </section>
+
+  <p class="save-status" id="saveStatus"></p>
+</main>
+
+<div class="toast" id="toast">ふくちゃんにごはんをあげたよ🍚</div>
+
+<script>
+const STORAGE_KEY = 'fukuchan-feed-data';
+let state = { feedings: [], intervalHours: 24 };
+let saveMode = 'memory'; // 'claude' | 'local' | 'memory'
+
+// ---------- 保存先をしらべる ----------
+async function detectStorage(){
+  if(window.storage && window.storage.set){
+    try{
+      await window.storage.set(STORAGE_KEY + '-ping', 'ok');
+      saveMode = 'claude';
+      return;
+    }catch(e){ /* Claude保存が使えない環境 */ }
+  }
+  try{
+    const t = '__fuku_test__';
+    localStorage.setItem(t, '1');
+    localStorage.removeItem(t);
+    saveMode = 'local';
+    return;
+  }catch(e){ /* ブラウザ保存も使えない */ }
+  saveMode = 'memory';
+}
+
+function updateSaveStatus(){
+  const el = document.getElementById('saveStatus');
+  if(saveMode === 'claude'){
+    el.textContent = '💾 記録はちゃんと保存されるよ';
+    el.className = 'save-status ok';
+  }else if(saveMode === 'local'){
+    el.textContent = '💾 記録はこのブラウザに保存されるよ';
+    el.className = 'save-status ok';
+  }else{
+    el.textContent = '⚠️ この画面では保存できないみたい。閉じると記録が消えちゃうよ';
+    el.className = 'save-status warn';
+  }
+}
+
+// ---------- 保存・読み込み ----------
+function applyParsed(raw){
+  try{
+    const p = JSON.parse(raw);
+    if(Array.isArray(p.feedings)) state.feedings = p.feedings;
+    if(typeof p.intervalHours === 'number') state.intervalHours = p.intervalHours;
+  }catch(e){}
+}
+async function loadState(){
+  if(saveMode === 'claude'){
+    try{
+      const res = await window.storage.get(STORAGE_KEY);
+      if(res && res.value) applyParsed(res.value);
+      return;
+    }catch(e){ /* 初回はキーが無いのでOK */ }
+  }
+  if(saveMode === 'claude' || saveMode === 'local'){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) applyParsed(raw);
+    }catch(e){}
+  }
+}
+async function saveState(){
+  const raw = JSON.stringify(state);
+  if(saveMode === 'claude'){
+    try{
+      await window.storage.set(STORAGE_KEY, raw);
+      return;
+    }catch(e){ /* Claude保存に失敗 → ブラウザ保存へ切り替え */ }
+  }
+  try{
+    localStorage.setItem(STORAGE_KEY, raw);
+    if(saveMode !== 'local'){ saveMode = 'local'; updateSaveStatus(); }
+  }catch(e){
+    if(saveMode !== 'memory'){ saveMode = 'memory'; updateSaveStatus(); }
+  }
+}
+
+// ---------- 表示 ----------
+function fmtDate(ts){
+  const d = new Date(ts);
+  const m = d.getMonth()+1, day = d.getDate();
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  const wd = ['日','月','火','水','木','金','土'][d.getDay()];
+  return `${m}/${day}(${wd}) ${hh}:${mm}`;
+}
+function fmtGap(ms){
+  const h = ms / 3600000;
+  if(h < 1) return `${Math.max(1,Math.round(ms/60000))}分`;
+  if(h < 48) return `${Math.round(h*10)/10}時間`;
+  const days = Math.floor(h/24);
+  const rem = Math.round(h - days*24);
+  return rem > 0 ? `${days}日と${rem}時間` : `${days}日`;
+}
+
+function setFace(mode){
+  const show = (id, on)=>{ document.getElementById(id).style.display = on ? '' : 'none'; };
+  show('eyesHappy', mode==='happy');
+  show('eyesOpen',  mode==='soso');
+  show('eyesSad',   mode==='hungry' || mode==='starving');
+  show('mouthSmile', mode==='happy');
+  show('mouthFlat',  mode==='soso');
+  show('mouthOpen',  mode==='hungry' || mode==='starving');
+}
+function setDoughLevel(ratio){
+  // 満腹(0)で高く、空腹(1以上)でしぼむ
+  const top = 90 + Math.min(1.3, ratio) * 45; // 90〜148
+  document.getElementById('doughBody').setAttribute('y', top+5);
+  document.getElementById('doughTop').setAttribute('d',
+    `M46 ${top+5} Q60 ${top-4} 75 ${top+5} T104 ${top+5} T134 ${top+5} L134 190 L46 190 Z`);
+  const bubbles = document.getElementById('doughBubbles');
+  bubbles.style.opacity = ratio < 0.8 ? 1 : (ratio < 1 ? 0.5 : 0.15);
+}
+
+function render(){
+  const list = document.getElementById('historyList');
+  const empty = document.getElementById('emptyMsg');
+  const speech = document.getElementById('speech');
+  const elapsed = document.getElementById('elapsed');
+  const fill = document.getElementById('gaugeFill');
+
+  // 履歴
+  list.innerHTML = '';
+  const sorted = [...state.feedings].sort((a,b)=>b-a);
+  empty.style.display = sorted.length ? 'none' : '';
+  sorted.slice(0,20).forEach((ts,i)=>{
+    const li = document.createElement('li');
+    li.className = 'history-item';
+    const prev = sorted[i+1];
+    const gapTxt = prev ? `前回から${fmtGap(ts-prev)}` : 'はじめての記録';
+    li.innerHTML = `<span><span class="date">${fmtDate(ts)}</span><span class="gap">${gapTxt}</span></span>`;
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '✕';
+    del.setAttribute('aria-label','この記録を消す');
+    del.onclick = async ()=>{
+      state.feedings = state.feedings.filter(t=>t!==ts);
+      await saveState(); render();
+    };
+    li.appendChild(del);
+    list.appendChild(li);
+  });
+
+  // 状態
+  if(!sorted.length){
+    speech.textContent = 'はじめまして、ふくちゃんだよ🌾';
+    elapsed.textContent = 'まだ記録がないよ';
+    fill.style.width = '0%';
+    setFace('soso'); setDoughLevel(0.5);
+    return;
+  }
+  const last = sorted[0];
+  const diff = Date.now() - last;
+  const ratio = diff / (state.intervalHours * 3600000);
+  elapsed.innerHTML = `さいごのごはん：<strong>${fmtGap(diff)}前</strong><br><small>${fmtDate(last)}</small>`;
+
+  fill.style.width = Math.min(100, ratio*100) + '%';
+  let mode, msg, color;
+  if(ratio < 0.5){ mode='happy';  msg='ぷくぷく〜♪ ごきげんだよ';        color='var(--ok)'; }
+  else if(ratio < 0.8){ mode='soso'; msg='まったりちゅう…';               color='var(--honey)'; }
+  else if(ratio < 1){ mode='hungry'; msg='そろそろおなかすいてきたかも…'; color='var(--honey)'; }
+  else if(ratio < 1.5){ mode='hungry'; msg='ぺこぺこだよ〜！ごはんちょうだい！'; color='var(--hungry)'; }
+  else { mode='starving'; msg='ぐぅ…おなかすいたよぉ…🥺';               color='var(--hungry)'; }
+  speech.textContent = msg;
+  fill.style.background = color;
+  setFace(mode); setDoughLevel(ratio);
+}
+
+// ---------- 操作 ----------
+document.getElementById('feedBtn').onclick = async ()=>{
+  state.feedings.push(Date.now());
+  await saveState(); render();
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(()=>toast.classList.remove('show'), 2200);
+};
+
+const modeBtns = document.querySelectorAll('.mode-btn');
+const customRow = document.getElementById('customRow');
+const customInput = document.getElementById('customHours');
+function syncModeUI(){
+  modeBtns.forEach(b=>{
+    const v = b.dataset.hours;
+    const isCustom = v==='custom';
+    const active = isCustom
+      ? (state.intervalHours !== 24 && state.intervalHours !== 168)
+      : state.intervalHours === Number(v);
+    b.classList.toggle('active', active);
+    if(isCustom) customRow.classList.toggle('show', active);
+  });
+  if(state.intervalHours !== 24 && state.intervalHours !== 168){
+    customInput.value = state.intervalHours;
+  }
+}
+modeBtns.forEach(b=>{
+  b.onclick = async ()=>{
+    const v = b.dataset.hours;
+    if(v==='custom'){
+      state.intervalHours = Number(customInput.value) || 48;
+    }else{
+      state.intervalHours = Number(v);
+    }
+    syncModeUI(); await saveState(); render();
+  };
+});
+customInput.onchange = async ()=>{
+  const n = Number(customInput.value);
+  if(n >= 1 && n <= 720){
+    state.intervalHours = n;
+    await saveState(); render();
+  }
+};
+
+// ---------- 背景の気泡 ----------
+(function(){
+  const wrap = document.querySelector('.bg-bubbles');
+  for(let i=0;i<10;i++){
+    const s = document.createElement('span');
+    const size = 12 + Math.random()*30;
+    s.style.width = s.style.height = size+'px';
+    s.style.left = Math.random()*100+'%';
+    s.style.animationDuration = (14+Math.random()*16)+'s';
+    s.style.animationDelay = (Math.random()*14)+'s';
+    wrap.appendChild(s);
+  }
+})();
+
+// ---------- 起動 ----------
+(async ()=>{
+  await detectStorage();
+  await loadState();
+  updateSaveStatus();
+  syncModeUI();
+  render();
+  setInterval(render, 60000); // 1分ごとに更新
+})();
+</script>
+</body>
+</html>
