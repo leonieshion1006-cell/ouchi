@@ -58,7 +58,14 @@ header p{font-size:.8rem;color:var(--crust);opacity:.75;margin-top:2px;}
   text-align:center;
 }
 .jar-wrap{display:flex;justify-content:center;}
-#fukuSvg{width:180px;height:200px;}
+#fukuSvg{width:180px;height:200px;transform-origin:bottom center;}
+@keyframes fukuBounce{
+  0%{transform:scale(1);}
+  30%{transform:scale(1.12,0.9);}
+  60%{transform:scale(0.94,1.08);}
+  100%{transform:scale(1);}
+}
+#fukuSvg.bounce{animation:fukuBounce .6s ease;}
 .speech{
   margin-top:10px;font-size:1.02rem;font-weight:700;min-height:1.6em;
 }
@@ -202,7 +209,7 @@ header p{font-size:.8rem;color:var(--crust);opacity:.75;margin-top:2px;}
     <p class="speech" id="speech">…</p>
     <p class="elapsed" id="elapsed">まだ記録がないよ</p>
     <div class="gauge"><div class="gauge-fill" id="gaugeFill"></div></div>
-    <p class="gauge-label" id="gaugeLabel">おなかすきメーター</p>
+    <p class="gauge-label" id="gaugeLabel">まんぷくメーター</p>
   </section>
 
   <button class="feed-btn" id="feedBtn">🥣 ごはんあげた！</button>
@@ -387,7 +394,8 @@ function render(){
   const ratio = diff / (state.intervalHours * 3600000);
   elapsed.innerHTML = `さいごのごはん：<strong>${fmtGap(diff)}前</strong><br><small>${fmtDate(last)}</small>`;
 
-  fill.style.width = Math.min(100, ratio*100) + '%';
+  const fullness = Math.max(0, 1 - ratio); // まんぷく度
+  fill.style.width = (fullness * 100) + '%';
   let mode, msg, color;
   if(ratio < 0.5){ mode='happy';  msg='ぷくぷく〜♪ ごきげんだよ';        color='var(--ok)'; }
   else if(ratio < 0.8){ mode='soso'; msg='まったりちゅう…';               color='var(--honey)'; }
@@ -403,6 +411,10 @@ function render(){
 document.getElementById('feedBtn').onclick = async ()=>{
   state.feedings.push(Date.now());
   await saveState(); render();
+  const svg = document.getElementById('fukuSvg');
+  svg.classList.remove('bounce');
+  void svg.offsetWidth; // アニメをリセット
+  svg.classList.add('bounce');
   const toast = document.getElementById('toast');
   toast.classList.add('show');
   setTimeout(()=>toast.classList.remove('show'), 2200);
