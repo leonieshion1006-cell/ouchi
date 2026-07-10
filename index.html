@@ -141,6 +141,23 @@ textarea{resize:none;line-height:1.7;}
   color:var(--acc);font-size:13px;max-width:92%;white-space:pre-wrap;
 }
 #ch-input{font-size:var(--fs,15px);}
+.msg .pimg{display:block;max-width:100%;border-radius:12px;margin:0 0 6px;}
+.msg.user.hasimg{padding:6px 6px 9px;}
+.msg.user.hasimg .cap{padding:0 9px;display:block;}
+.cam{
+  width:44px;height:44px;border-radius:50%;flex-shrink:0;font-size:19px;
+  display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb, var(--acc) 10%, var(--card));
+  border:1.5px solid var(--line);
+}
+.pv{
+  flex-shrink:0;display:flex;align-items:center;gap:10px;
+  padding:8px 14px;background:var(--paper);border-top:1.5px solid var(--line);
+}
+.pv img{width:54px;height:54px;object-fit:cover;border-radius:10px;flex-shrink:0;}
+.pv span{flex:1;font-size:12px;color:var(--sub);}
+.pv .x{width:30px;height:30px;border-radius:50%;flex-shrink:0;font-size:13px;
+  background:var(--card);border:1.5px solid var(--line);}
 .cost{align-self:flex-start;font-size:10.5px;color:var(--sub);margin:-8px 0 0 8px;}
 .cost.r{align-self:flex-end;margin:-8px 8px 0 0;}
 .think{
@@ -268,7 +285,14 @@ textarea{resize:none;line-height:1.7;}
     <button class="hbtn" onclick="memorizeNow()" aria-label="ここまでを記憶に">🧠</button>
   </div>
   <div class="chat" id="chat-log"></div>
+  <div class="pv" id="ch-pv" style="display:none">
+    <img id="ch-pv-img" alt="">
+    <span>この写真をいっしょに送るよ</span>
+    <button class="x" onclick="clearPhoto()" aria-label="写真を取り消す">✕</button>
+  </div>
   <div class="inputbar">
+    <button class="cam" onclick="document.getElementById('ch-file').click()" aria-label="写真を選ぶ">📷</button>
+    <input type="file" id="ch-file" accept="image/*" style="display:none" onchange="pickPhoto(event)">
     <textarea id="ch-input" rows="1" placeholder="メッセージ" oninput="autoGrow(this)"></textarea>
     <button class="send" id="ch-send" onclick="sendMsg()" aria-label="送信">↑</button>
   </div>
@@ -365,7 +389,7 @@ textarea{resize:none;line-height:1.7;}
       <p>
 ・会話や記憶はぜんぶ<b>このスマホの中だけ</b>に保存されます。VercelやGitHubには送られません。<br><br>
 ・そのかわり、ブラウザのデータを全消去すると一緒に消えます。<b>ときどき「おひっこし」でファイルに書き出す</b>のが一番のお守りです。<br><br>
-・<b>長いスレほど1往復が高くなります</b>（それまでの会話を持っていくため）。設定の🎒で持ち歩き量をしぼるか、🧠で記憶に綴じてから新しいスレに移ると、安くて軽くなります。<br><br>
+・<b>長いスレほど1往復が高くなります</b>（それまでの会話を持っていくため）。設定の🎒で持ち歩き量をしぼるか、🧠で記憶に綴じてから新しいスレに移ると、安くて軽くなります。<br><br>・📷<b>写真は1枚で長めの文章くらいのお値段</b>です。直近3往復ぶんの写真だけをその子に見せる仕組みなので、古い写真は自動でお留守番して、お財布を守ります。<br><br>
 ・お金がかかるのは「会話」「🧠で綴じる」「💭思考」だけ。検索・編集・記憶の管理・バックアップは0円です。<br><br>
 ・自分の吹き出しをタップすると発言を編集できます。</p>
     </div>
@@ -389,7 +413,7 @@ const PRICE={ /* 100万トークンあたりのドル {入力, 出力} */
   "claude-haiku-4-5-20251001":{i:1,o:5}
 };
 let db=normalize(null);
-let state={screen:"home",currentComp:null,currentConvo:null,editing:null,busy:false};
+let state={screen:"home",currentComp:null,currentConvo:null,editing:null,busy:false,pendingImg:null};
 
 function normalize(d){
   if(!d||!d.companions)d={apiKey:"",companions:[],conversations:[]};
@@ -611,7 +635,10 @@ function renderChat(){
   const log=document.getElementById("chat-log");
   let html=v.messages.map((m,i)=>{
     if(m.role==="user"){
-      let s=`<div class="msg user" onclick="editMsg(${i})">${esc(m.content)}</div>`;
+      let inner="";
+      if(m.img)inner+=`<img class="pimg" src="${m.img}" alt="写真">`;
+      if(m.content)inner+=(m.img?`<span class="cap">${esc(m.content)}</span>`:esc(m.content));
+      let s=`<div class="msg user${m.img?" hasimg":""}" onclick="editMsg(${i})">${inner}</div>`;
       if(m.at)s+=`<div class="cost r">${fmtShort(m.at)}</div>`;
       return s;
     }
@@ -701,18 +728,48 @@ function breakerTripped(){
   return db.limitJpy>0 && yen(db.spentUsd)>=db.limitJpy;
 }
 
+/* ---------- 写真送信 ---------- */
+function pickPhoto(ev){
+  const f=ev.target.files[0];ev.target.value="";
+  if(!f)return;
+  const img=new Image();
+  const url=URL.createObjectURL(f);
+  img.onload=()=>{
+    const MAX=1024; /* 長辺を縮めて通信もお財布も軽く */
+    let w=img.width,h=img.height;
+    const sc=Math.min(1,MAX/Math.max(w,h));
+    w=Math.round(w*sc);h=Math.round(h*sc);
+    const cv=document.createElement("canvas");cv.width=w;cv.height=h;
+    cv.getContext("2d").drawImage(img,0,0,w,h);
+    URL.revokeObjectURL(url);
+    state.pendingImg=cv.toDataURL("image/jpeg",0.8);
+    document.getElementById("ch-pv-img").src=state.pendingImg;
+    document.getElementById("ch-pv").style.display="flex";
+  };
+  img.onerror=()=>{URL.revokeObjectURL(url);toast("この写真は読めなかった…");};
+  img.src=url;
+}
+function clearPhoto(){
+  state.pendingImg=null;
+  const pv=document.getElementById("ch-pv");
+  if(pv)pv.style.display="none";
+}
+
 async function sendMsg(){
   if(state.busy)return;
   const input=document.getElementById("ch-input");
   const text=input.value.trim();
-  if(!text)return;
+  if(!text&&!state.pendingImg)return;
   if(!db.apiKey){toast("先に設定でAPIキーを入れてね");go("settings");return;}
   if(breakerTripped()){showErr("上限ブレーカーが作動中（合計 ¥"+yen(db.spentUsd)+" / 上限 ¥"+db.limitJpy+"）。\n設定で上限を上げるか、メーターをリセットしてね。");return;}
   const v=db.conversations.find(x=>x.id===state.currentConvo);
-  v.messages.push({role:"user",content:text,at:Date.now()});
-  if(!v.title)v.title=text.slice(0,30);
+  const msg={role:"user",content:text,at:Date.now()};
+  if(state.pendingImg)msg.img=state.pendingImg;
+  v.messages.push(msg);
+  if(!v.title)v.title=(text||"📷 写真").slice(0,30);
   v.updatedAt=Date.now();save();
   input.value="";input.style.height="auto";
+  clearPhoto();
   await requestReply();
 }
 
@@ -727,14 +784,26 @@ async function requestReply(){
   tip.className="typing";tip.innerHTML="<span></span><span></span><span></span>";
   log.appendChild(tip);log.scrollTop=log.scrollHeight;
   try{
+    const packed=packMessages(v.messages);
+    const IMGKEEP=6; /* 直近6発言（3往復）の写真だけ実物を持っていく */
     const body={
       model:c.model,
       max_tokens:db.thinkOn?9000:4096,
       system:buildSystem(c),
-      messages:packMessages(v.messages).map(m=>({
-        role:m.role,
-        content:(m.role==="user"&&m.at)?("【"+fmtFull(m.at)+"】"+m.content):m.content
-      }))
+      messages:packed.map((m,idx)=>{
+        const stamp=(m.role==="user"&&m.at)?("【"+fmtFull(m.at)+"】"):"";
+        if(m.role==="user"&&m.img){
+          if(packed.length-idx<=IMGKEEP){
+            const media=m.img.slice(5,m.img.indexOf(";"))||"image/jpeg";
+            return {role:"user",content:[
+              {type:"image",source:{type:"base64",media_type:media,data:m.img.split(",")[1]}},
+              {type:"text",text:stamp+(m.content||"（写真を見せたよ）")}
+            ]};
+          }
+          return {role:"user",content:stamp+"【写真を見せた】"+m.content};
+        }
+        return {role:m.role,content:m.role==="user"?(stamp+m.content):m.content};
+      })
     };
     if(db.thinkOn)body.thinking={type:"enabled",budget_tokens:3000};
     const r=await apiPost(db.apiKey,body);
@@ -782,7 +851,7 @@ function editMsg(i){
   const nt=prompt("編集してね",m.content);
   if(nt===null)return;
   const text=nt.trim();
-  if(!text){toast("空っぽにはできないよ");return;}
+  if(!text&&!m.img){toast("空っぽにはできないよ");return;}
   m.content=text;
   v.messages=v.messages.slice(0,i+1);
   v.updatedAt=Date.now();save();
