@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ふせんボード</title>
+<link rel="apple-touch-icon" href="fusen-icon-180.png">
+<link rel="icon" type="image/png" href="fusen-icon-512.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ふせん">
+<meta name="theme-color" content="#b3906a">
+<style>
+  :root{
+    --cork:#b3906a;
+    --ink:#4a3b2a;
+    --shadow:0 3px 8px rgba(60,40,15,.35);
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; overflow:hidden; }
+  body{
+    font-family:"Hiragino Maru Gothic ProN","BIZ UDGothic","Yu Gothic",sans-serif;
+    background:#8a6b47;
+    color:var(--ink);
+    touch-action:none;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+
+  /* ===== コルクボード ===== */
+  #board{
+    position:fixed; inset:0 0 64px 0;
+    background-color:var(--cork);
+    background-image:
+      radial-gradient(rgba(255,255,255,.14) 1px, transparent 1.6px),
+      radial-gradient(rgba(90,60,25,.22) 1.2px, transparent 2px),
+      radial-gradient(rgba(255,240,210,.10) 1.5px, transparent 2.4px),
+      radial-gradient(rgba(70,45,18,.16) 1px, transparent 1.8px);
+    background-size:41px 53px, 67px 47px, 89px 71px, 29px 37px;
+    background-position:0 0, 13px 21px, 31px 7px, 5px 29px;
+    overflow:hidden;
+  }
+  #board.slide-left  .sticky{ animation:slideInL .25s ease-out; }
+  #board.slide-right .sticky{ animation:slideInR .25s ease-out; }
+  @keyframes slideInL{ from{ transform:translateX(40px); opacity:0; } to{ transform:none; opacity:1; } }
+  @keyframes slideInR{ from{ transform:translateX(-40px); opacity:0; } to{ transform:none; opacity:1; } }
+  @media (prefers-reduced-motion:reduce){
+    #board.slide-left .sticky, #board.slide-right .sticky{ animation:none; }
+  }
+
+  /* ===== 付箋 ===== */
+  .sticky{
+    position:absolute;
+    width:min(72vw, 300px);
+    min-height:76px;
+    display:flex;
+    box-shadow:var(--shadow);
+    border-radius:2px 2px 10px 2px;
+    cursor:grab;
+    touch-action:none;
+  }
+  .sticky.dragging{ cursor:grabbing; box-shadow:0 10px 22px rgba(50,30,10,.45); z-index:99 !important; }
+  .sticky .paper{
+    flex:1;
+    padding:10px 8px 22px 12px;
+    font-size:16px;
+    line-height:1.45;
+    white-space:pre-wrap;
+    word-break:break-word;
+    overflow:hidden;
+    border-radius:2px 0 0 10px;
+  }
+  .sticky .band{
+    width:44px;
+    flex:none;
+    border-radius:0 2px 2px 0;
+  }
+  .sticky .stamp{
+    position:absolute;
+    right:52px; bottom:4px;
+    font-size:11px;
+    color:#6d5a41;
+    letter-spacing:.02em;
+    pointer-events:none;
+  }
+  /* めくれ角 */
+  .sticky::after{
+    content:"";
+    position:absolute; right:-1px; bottom:-1px;
+    width:16px; height:16px;
+    background:linear-gradient(315deg, transparent 48%, rgba(0,0,0,.13) 50%, rgba(255,255,255,.6) 56%, rgba(245,240,228,.95) 62%);
+    border-radius:0 0 10px 0;
+  }
+
+  /* ===== ページドットバー ===== */
+  #pagebar{
+    position:fixed; left:0; right:0; bottom:0; height:64px;
+    background:linear-gradient(#3a2f24, #241c14);
+    display:flex; align-items:center; justify-content:center;
+    gap:14px;
+    box-shadow:0 -2px 6px rgba(0,0,0,.4);
+  }
+  .dot{
+    width:11px; height:11px; border-radius:50%;
+    background:#6e604e; border:none; padding:0;
+    transition:transform .15s, background .15s;
+  }
+  .dot.on{ background:#7ec8e3; transform:scale(1.45); }
+  #addPageBtn{
+    background:none; border:2px dashed #8a7a63; color:#cbb894;
+    width:26px; height:26px; border-radius:50%;
+    font-size:16px; line-height:1;
+  }
+  #pageLabel{
+    position:absolute; left:14px; color:#cbb894; font-size:12px;
+  }
+  #delPageBtn{
+    position:absolute; right:14px;
+    background:none; border:none; color:#a08d72; font-size:18px;
+  }
+
+  /* ===== ＋ボタン ===== */
+  #addBtn{
+    position:fixed; right:18px; bottom:86px;
+    width:58px; height:58px; border-radius:50%;
+    border:none;
+    background:#e0574f;
+    color:#fff; font-size:32px; line-height:1;
+    box-shadow:0 4px 10px rgba(0,0,0,.35);
+    z-index:50;
+  }
+  #addBtn:active{ transform:scale(.93); }
+
+  /* ===== シート(柄えらび / 編集) ===== */
+  .veil{
+    position:fixed; inset:0; background:rgba(30,20,10,.45);
+    display:none; z-index:100;
+  }
+  .veil.show{ display:block; }
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0;
+    background:#f6efe2;
+    border-radius:18px 18px 0 0;
+    padding:18px 16px calc(18px + env(safe-area-inset-bottom));
+    box-shadow:0 -6px 20px rgba(0,0,0,.35);
+    z-index:101;
+    transform:translateY(105%);
+    transition:transform .22s ease-out;
+  }
+  .veil.show .sheet{ transform:none; }
+  @media (prefers-reduced-motion:reduce){ .sheet{ transition:none; } }
+  .sheet h2{ font-size:15px; margin-bottom:12px; color:#5a4630; }
+  .swatches{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;
+  }
+  .swatch{
+    height:64px; border:none; border-radius:6px;
+    display:flex; overflow:hidden;
+    box-shadow:0 2px 5px rgba(0,0,0,.2);
+    outline-offset:3px;
+  }
+  .swatch .p{ flex:1; }
+  .swatch .b{ width:22px; flex:none; }
+  .swatch.sel{ outline:3px solid #e0574f; }
+
+  /* 編集シート */
+  #editArea{
+    width:100%; height:34vh;
+    border:none; border-radius:8px;
+    padding:12px; font:inherit; font-size:17px; line-height:1.5;
+    resize:none;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.15);
+    margin-bottom:12px;
+    user-select:text; -webkit-user-select:text;
+  }
+  #editArea:focus{ outline:2px solid #7ec8e3; }
+  .editRow{ display:flex; gap:10px; margin-bottom:12px; overflow-x:auto; padding:4px 2px; }
+  .editRow .swatch{ width:58px; height:44px; flex:none; }
+  .btnRow{ display:flex; gap:10px; }
+  .btnRow button{
+    flex:1; padding:13px 0; border:none; border-radius:10px;
+    font:inherit; font-size:15px;
+  }
+  #doneBtn{ background:#e0574f; color:#fff; }
+  #delBtn{ background:#efe4d0; color:#8a5a4a; flex:0 0 auto; padding:13px 18px; }
+  #delBtn.arm{ background:#c0392b; color:#fff; }
+</style>
+</head>
+<body>
+
+<div id="board"></div>
+
+<button id="addBtn" aria-label="付箋を追加">＋</button>
+
+<div id="pagebar">
+  <span id="pageLabel"></span>
+  <div id="dots" style="display:flex;gap:14px;align-items:center;"></div>
+  <button id="addPageBtn" aria-label="ページを追加">＋</button>
+  <button id="delPageBtn" aria-label="このページを削除">🗑</button>
+</div>
+
+<!-- 柄えらびシート -->
+<div class="veil" id="pickVeil">
+  <div class="sheet">
+    <h2>どの付箋にする?</h2>
+    <div class="swatches" id="pickSwatches"></div>
+  </div>
+</div>
+
+<!-- 編集シート -->
+<div class="veil" id="editVeil">
+  <div class="sheet">
+    <textarea id="editArea" placeholder="ここにメモを書いてね"></textarea>
+    <div class="editRow" id="editSwatches"></div>
+    <div class="btnRow">
+      <button id="delBtn">削除</button>
+      <button id="doneBtn">できた</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 柄の定義 ================= */
+const DAIJI = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='44' height='52'>" +
+  "<rect width='44' height='52' fill='white'/>" +
+  "<ellipse cx='22' cy='26' rx='17' ry='14' fill='white' stroke='#2b2b2b' stroke-width='2.2'/>" +
+  "<path d='M12 37 L8 44 L18 39 Z' fill='white' stroke='#2b2b2b' stroke-width='2'/>" +
+  "<text x='22' y='31' font-size='12.5' font-weight='bold' text-anchor='middle' fill='#c1272d' font-family='sans-serif'>大事</text>" +
+  "</svg>");
+const HANA = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60'>" +
+  "<rect width='60' height='60' fill='#fdf8ef'/>" +
+  "<g fill='#f2a7b8'><circle cx='15' cy='15' r='4'/><circle cx='15' cy='7' r='4'/><circle cx='9' cy='12' r='4'/><circle cx='21' cy='12' r='4'/><circle cx='12' cy='21' r='4'/><circle cx='18' cy='21' r='4'/></g>" +
+  "<circle cx='15' cy='14' r='3' fill='#f6d349'/>" +
+  "<g fill='#a8cf9e'><ellipse cx='44' cy='42' rx='6' ry='2.6' transform='rotate(40 44 42)'/><ellipse cx='50' cy='36' rx='6' ry='2.6' transform='rotate(-30 50 36)'/></g>" +
+  "</svg>");
+
+const PATTERNS = {
+  cream : { paper:"#f9f2dd", band:"repeating-linear-gradient(0deg,#f3e5c0 0 12px,#efdcae 12px 24px)" },
+  daiji : { paper:"#f7f2e4", band:`#fff url("${DAIJI}") repeat-y center / 44px 52px` },
+  dot   : { paper:"#f4f0e6", band:"#fdfcf8 radial-gradient(circle at 11px 13px, #7fb3d5 9px, transparent 10px) 0 0 / 34px 38px, #fdfcf8 radial-gradient(circle at 28px 32px, #9cc7e0 7px, transparent 8px) 0 0 / 34px 38px" },
+  hana  : { paper:"#fbf6ec", band:`#fdf8ef url("${HANA}") repeat 0 0 / 60px 60px` },
+  ichigo: { paper:"#fdeef0", band:"repeating-linear-gradient(45deg,#f5b8c4 0 9px,#fdeef0 9px 18px)" },
+  check : { paper:"#eef5ee", band:"repeating-linear-gradient(0deg, rgba(126,178,126,.5) 0 6px, transparent 6px 18px), repeating-linear-gradient(90deg, rgba(126,178,126,.5) 0 6px, #f3f8f1 6px 18px)" },
+};
+
+/* ================= 状態 ================= */
+let state = { pages:[[]], cur:0 };
+let saveTimer = null;
+
+async function persist(){
+  const json = JSON.stringify(state);
+  try{
+    if (window.storage && window.storage.set){
+      await window.storage.set("fusen-board", json);
+      return;
+    }
+  }catch(e){}
+  try{ localStorage.setItem("fusen-board", json); }catch(e){}
+}
+function queueSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(persist, 300); }
+
+async function load(){
+  let json = null;
+  try{
+    if (window.storage && window.storage.get){
+      const r = await window.storage.get("fusen-board");
+      if (r && r.value) json = r.value;
+    }
+  }catch(e){}
+  if (!json){ try{ json = localStorage.getItem("fusen-board"); }catch(e){} }
+  if (json){
+    try{
+      const s = JSON.parse(json);
+      if (s && Array.isArray(s.pages) && s.pages.length) state = s;
+    }catch(e){}
+  }
+  if (state.cur >= state.pages.length) state.cur = state.pages.length - 1;
+}
+
+/* ================= 描画 ================= */
+const board = document.getElementById("board");
+const dots  = document.getElementById("dots");
+const pageLabel = document.getElementById("pageLabel");
+
+function fmt(ts){
+  const d = new Date(ts);
+  const z = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}/${z(d.getMonth()+1)}/${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+
+function render(dir){
+  board.innerHTML = "";
+  board.classList.remove("slide-left","slide-right");
+  if (dir === 1) board.classList.add("slide-left");
+  if (dir === -1) board.classList.add("slide-right");
+
+  const page = state.pages[state.cur];
+  page.forEach((n, i) => {
+    const el = document.createElement("div");
+    el.className = "sticky";
+    el.style.left = n.x + "px";
+    el.style.top  = n.y + "px";
+    el.style.zIndex = i + 1;
+    const pat = PATTERNS[n.pat] || PATTERNS.cream;
+
+    const paper = document.createElement("div");
+    paper.className = "paper";
+    paper.style.background = pat.paper;
+    paper.textContent = n.text || "(タップして書く)";
+
+    const band = document.createElement("div");
+    band.className = "band";
+    band.style.background = pat.band;
+
+    const stamp = document.createElement("div");
+    stamp.className = "stamp";
+    stamp.textContent = fmt(n.ts);
+
+    el.append(paper, band, stamp);
+    attachDrag(el, n);
+    board.appendChild(el);
+  });
+
+  dots.innerHTML = "";
+  state.pages.forEach((_, i) => {
+    const b = document.createElement("button");
+    b.className = "dot" + (i === state.cur ? " on" : "");
+    b.setAttribute("aria-label", (i+1) + "ページ目");
+    b.onclick = () => { if (i !== state.cur){ const d = i > state.cur ? 1 : -1; state.cur = i; render(d); queueSave(); } };
+    dots.appendChild(b);
+  });
+  pageLabel.textContent = (state.cur+1) + " / " + state.pages.length;
+}
+
+/* ================= ドラッグ & タップ ================= */
+function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+function attachDrag(el, note){
+  let sx, sy, ox, oy, moved;
+  el.addEventListener("pointerdown", e => {
+    e.stopPropagation();
+    el.setPointerCapture(e.pointerId);
+    sx = e.clientX; sy = e.clientY;
+    ox = note.x; oy = note.y;
+    moved = false;
+  });
+  el.addEventListener("pointermove", e => {
+    if (sx === undefined) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!moved && Math.hypot(dx, dy) > 7){
+      moved = true;
+      el.classList.add("dragging");
+      // 掴んだ付箋をいちばん手前に
+      const page = state.pages[state.cur];
+      const idx = page.indexOf(note);
+      if (idx > -1){ page.splice(idx,1); page.push(note); }
+      el.style.zIndex = 999;
+    }
+    if (moved){
+      const r = el.getBoundingClientRect();
+      note.x = clamp(ox + dx, -r.width*0.4, board.clientWidth  - r.width*0.6);
+      note.y = clamp(oy + dy, 0,            board.clientHeight - 40);
+      el.style.left = note.x + "px";
+      el.style.top  = note.y + "px";
+    }
+  });
+  el.addEventListener("pointerup", e => {
+    if (sx === undefined) return;
+    sx = undefined;
+    el.classList.remove("dragging");
+    if (moved){ render(); queueSave(); }
+    else openEdit(note);
+  });
+  el.addEventListener("pointercancel", () => { sx = undefined; el.classList.remove("dragging"); render(); queueSave(); });
+}
+
+/* ================= ボードのスワイプでページ移動 ================= */
+let bs = null;
+board.addEventListener("pointerdown", e => { bs = { x:e.clientX, y:e.clientY }; });
+board.addEventListener("pointerup", e => {
+  if (!bs) return;
+  const dx = e.clientX - bs.x, dy = e.clientY - bs.y;
+  bs = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)*1.4){
+    if (dx < 0){
+      // 左へスワイプ → 次のページ(最後なら新規作成)
+      if (state.cur === state.pages.length - 1){
+        if (state.pages[state.cur].length === 0) return; // 空ページの連発は防ぐ
+        state.pages.push([]);
+      }
+      state.cur++;
+      render(1); queueSave();
+    } else if (state.cur > 0){
+      state.cur--;
+      render(-1); queueSave();
+    }
+  }
+});
+
+/* ================= ページ追加・削除 ================= */
+document.getElementById("addPageBtn").onclick = () => {
+  state.pages.splice(state.cur+1, 0, []);
+  state.cur++;
+  render(1); queueSave();
+};
+let delArm = false;
+const delPageBtn = document.getElementById("delPageBtn");
+delPageBtn.onclick = () => {
+  if (state.pages.length === 1 && state.pages[0].length === 0) return;
+  if (!delArm){
+    delArm = true;
+    delPageBtn.textContent = "ページ削除?";
+    delPageBtn.style.color = "#e0574f";
+    setTimeout(() => { delArm = false; delPageBtn.textContent = "🗑"; delPageBtn.style.color = ""; }, 2200);
+    return;
+  }
+  delArm = false;
+  delPageBtn.textContent = "🗑"; delPageBtn.style.color = "";
+  state.pages.splice(state.cur, 1);
+  if (state.pages.length === 0) state.pages = [[]];
+  state.cur = Math.min(state.cur, state.pages.length - 1);
+  render(); queueSave();
+};
+
+/* ================= 新規付箋(柄えらび) ================= */
+const pickVeil = document.getElementById("pickVeil");
+const pickSw = document.getElementById("pickSwatches");
+
+function swatchEl(key){
+  const pat = PATTERNS[key];
+  const b = document.createElement("button");
+  b.className = "swatch";
+  b.dataset.pat = key;
+  b.innerHTML = `<span class="p" style="background:${pat.paper}"></span><span class="b" style="background:${pat.band.replace(/"/g,'&quot;')}"></span>`;
+  // background shorthand が複雑な柄は style 直指定
+  b.lastChild.style.background = pat.band;
+  b.firstChild.style.background = pat.paper;
+  return b;
+}
+Object.keys(PATTERNS).forEach(key => {
+  const b = swatchEl(key);
+  b.onclick = () => {
+    pickVeil.classList.remove("show");
+    const w = Math.min(board.clientWidth * 0.72, 300);
+    const note = {
+      pat:key, text:"",
+      x: clamp(board.clientWidth/2 - w/2 + (Math.random()*40-20), 8, board.clientWidth - w - 8),
+      y: clamp(board.clientHeight*0.25 + (Math.random()*60-30), 8, board.clientHeight - 120),
+      ts: Date.now()
+    };
+    state.pages[state.cur].push(note);
+    render(); queueSave();
+    openEdit(note);
+  };
+  pickSw.appendChild(b);
+});
+document.getElementById("addBtn").onclick = () => pickVeil.classList.add("show");
+pickVeil.addEventListener("pointerdown", e => { if (e.target === pickVeil) pickVeil.classList.remove("show"); });
+
+/* ================= 編集シート ================= */
+const editVeil = document.getElementById("editVeil");
+const editArea = document.getElementById("editArea");
+const editSw   = document.getElementById("editSwatches");
+const delBtn   = document.getElementById("delBtn");
+let editing = null;
+
+Object.keys(PATTERNS).forEach(key => {
+  const b = swatchEl(key);
+  b.onclick = () => {
+    if (!editing) return;
+    editing.pat = key;
+    editArea.style.background = PATTERNS[key].paper;
+    [...editSw.children].forEach(c => c.classList.toggle("sel", c.dataset.pat === key));
+  };
+  editSw.appendChild(b);
+});
+
+function openEdit(note){
+  editing = note;
+  editArea.value = note.text;
+  editArea.style.background = (PATTERNS[note.pat]||PATTERNS.cream).paper;
+  [...editSw.children].forEach(c => c.classList.toggle("sel", c.dataset.pat === note.pat));
+  delBtn.classList.remove("arm");
+  delBtn.textContent = "削除";
+  editVeil.classList.add("show");
+  setTimeout(() => editArea.focus(), 250);
+}
+function closeEdit(save){
+  if (editing && save){
+    if (editArea.value !== editing.text){
+      editing.text = editArea.value;
+      editing.ts = Date.now();
+    }
+  }
+  editing = null;
+  editVeil.classList.remove("show");
+  render(); queueSave();
+}
+document.getElementById("doneBtn").onclick = () => closeEdit(true);
+editVeil.addEventListener("pointerdown", e => { if (e.target === editVeil) closeEdit(true); });
+
+delBtn.onclick = () => {
+  if (!editing) return;
+  if (!delBtn.classList.contains("arm")){
+    delBtn.classList.add("arm");
+    delBtn.textContent = "ほんとに削除?";
+    setTimeout(() => { delBtn.classList.remove("arm"); delBtn.textContent = "削除"; }, 2500);
+    return;
+  }
+  const page = state.pages[state.cur];
+  const idx = page.indexOf(editing);
+  if (idx > -1) page.splice(idx, 1);
+  editing = null;
+  editVeil.classList.remove("show");
+  render(); queueSave();
+};
+
+/* ================= 起動 ================= */
+load().then(() => render());
+window.addEventListener("visibilitychange", () => { if (document.hidden) persist(); });
+</script>
+</body>
+</html>
