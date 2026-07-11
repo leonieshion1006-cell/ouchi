@@ -268,6 +268,17 @@ textarea{resize:none;line-height:1.7;}
     <input id="f-name" placeholder="例：ひよ">
     <label class="label">その子の色</label>
     <div class="swatches" id="f-swatches"></div>
+    <div id="f-books-sec" style="display:none">
+      <label class="label">📚 本棚（この子だけが読める資料）</label>
+      <p class="hint" style="margin-top:4px">思い出・記念日・会話ログなどのテキストをしまえます。ONの本は毎回いっしょに持っていくので、大きい本ほど1往復が高くなります（連続でお話し中は約1/10に割引）。長い日常の記憶は🧠カードの方が経済的。</p>
+      <div id="f-books"></div>
+      <div id="f-book-new" style="display:none;margin-top:10px">
+        <input id="fb-title" placeholder="本のタイトル（例：ふたりの記念日）">
+        <textarea id="fb-text" rows="6" placeholder="ここに本文を貼ってね" style="margin-top:8px"></textarea>
+        <button class="primary" style="margin-top:10px" onclick="saveBook()">この本をしまう</button>
+      </div>
+      <button class="ghost" id="fb-add" style="margin-top:10px" onclick="newBookForm()">＋ 本を入れる</button>
+    </div>
     <label class="label">お部屋の内装（壁紙）</label>
     <select id="f-room">
       <option value="">そのまま（みんなと同じ）</option>
@@ -449,6 +460,12 @@ textarea{resize:none;line-height:1.7;}
       <p class="hint">長いスレは「🧠で綴じてから範囲をしぼる」のが、安さと記憶の両立にいちばんおすすめ。</p>
     </div>
     <div class="section">
+      <h3>👤 りかこのこと</h3>
+      <p>ここに書いたことは、家族みんなに自動で伝わります（仕事のこと、好きなもの、性格、呼んでほしい名前など）。短くても長くてもOK。</p>
+      <textarea id="s-profile" rows="6" placeholder="例：トリマー歴30年。自宅サロンをやってる。天然酵母のパン作りと陶芸と筋トレが好き。寂しがり屋で甘えんぼう。" style="margin-top:12px"></textarea>
+      <button class="primary" style="margin-top:12px" onclick="saveProfile()">保存する</button>
+    </div>
+    <div class="section">
       <h3>🌤 お天気と気圧</h3>
       <p>地域を設定すると、ホームに今のお天気と気圧の予報が出ます。気圧が下がる予報の時はおしらせも。子どもたちにも今のお天気がそっと伝わるので、体調を気づかってもらえます。地域はこの端末の中にだけ保存されます。</p>
       <input id="s-geo" placeholder="市や町の名前（例：横浜）" style="margin-top:12px">
@@ -535,6 +552,7 @@ function normalize(d){
   if(typeof d.keyGemini!=="string")d.keyGemini="";
   if(typeof d.keyXai!=="string")d.keyXai="";
   if(d.geo&&(typeof d.geo.lat!=="number"||typeof d.geo.lon!=="number"))d.geo=null;
+  if(typeof d.profile!=="string")d.profile="";
   return d;
 }
 
@@ -632,6 +650,7 @@ function go(name){
     document.getElementById("s-limit").value=db.limitJpy||"";
     document.getElementById("s-turns").value=String(db.sendTurns||0);
     document.getElementById("s-font").value=String(db.fontPx||15);
+    document.getElementById("s-profile").value=db.profile||"";
     document.getElementById("s-geo").value=(db.geo&&db.geo.name)||"";
     document.getElementById("s-geo-now").textContent=db.geo?("🌤 いまは「"+db.geo.name+"」に設定中"):"";
     renderUsage();renderThinkBtn();
@@ -690,6 +709,10 @@ function editCompanion(id){
   if(wall&&!roomKnown.includes(wall)){rsel.value="custom";rcol.style.display="block";rcol.value=wall;}
   else{rsel.value=wall;rcol.style.display="none";}
   document.getElementById("f-room-win").value=(c&&c.roomWin)?"1":"";
+  document.getElementById("f-books-sec").style.display=(c&&state.editing)?"block":"none";
+  document.getElementById("f-book-new").style.display="none";
+  document.getElementById("fb-add").style.display="block";
+  if(c&&state.editing)renderBooks();
   if(c&&!known.includes(c.model)){sel.value="custom";cus.style.display="block";cus.value=c.model;}
   else{sel.value=c?c.model:"claude-sonnet-4-5";cus.style.display="none";cus.value="";}
   selColor=c?c.color:COLORS[db.companions.length%COLORS.length];
@@ -809,6 +832,9 @@ function buildSystem(c){
   let info="【システム情報】現在日時: "+stamp+"（ユーザー端末の時刻）／あなたが今動いているモデル: "+c.model+"。この情報は毎ターン自動更新されます。ユーザーの各発言の冒頭に付く【日時】の印はシステムが自動で付けたものです。過去の発言との時間差（昨日・今朝など）の把握に使い、あなた自身の返事には同じ形式の印を付けないでください。";
   if(db.thinkOn)info+="思考（thinking）も必ず日本語で書いてください。";
   let base=c.prompt||"（特別な設定はありません）";
+  if(db.profile&&db.profile.trim())base+="\n\n【りかこのこと（本人が書いた自己紹介。家族みんなが知っていること）】\n"+db.profile.trim();
+  const books=(c.books||[]).filter(b=>b.on);
+  for(const b of books)base+="\n\n【本棚：「"+b.title+"」】\n"+b.text;
   const mems=(c.memories||[]).filter(m=>m.on).map(m=>"・"+m.text);
   if(mems.length)base+="\n\n【記憶：あなたがこれまでに覚えてきたこと】\n"+mems.join("\n");
   return [
@@ -843,6 +869,70 @@ function applyFont(){
 function saveFont(){
   db.fontPx=parseFloat(document.getElementById("s-font").value)||15;
   save();applyFont();toast("文字サイズを変えたよ");
+}
+
+/* ---------- りかこのこと ---------- */
+function saveProfile(){
+  db.profile=document.getElementById("s-profile").value;
+  save();toast("みんなに伝えたよ");
+}
+
+/* ---------- 📚本棚 ---------- */
+function bookYen(chars,model){
+  const pr=priceOf(model);
+  return Math.round(chars*pr.i/1e6*JPY*10)/10; /* 1文字≒1トークンのざっくり見積り */
+}
+function renderBooks(){
+  const c=db.companions.find(x=>x.id===state.editing);
+  const box=document.getElementById("f-books");
+  if(!c||!box)return;
+  const books=c.books||[];
+  if(!books.length){box.innerHTML='<p class="hint">まだ本がありません</p>';return;}
+  box.innerHTML=books.map(b=>{
+    const y=bookYen(b.text.length,c.model);
+    return `<div style="margin-top:10px;padding:12px 14px;background:var(--card);border:1.5px solid var(--line);border-radius:14px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <b style="flex:1;font-size:14px">${esc(b.title)}</b>
+        <button class="ghost" style="width:auto;margin:0;padding:6px 12px;font-size:12px" onclick="toggleBook('${b.id}')">${b.on?"ON📖":"OFF📕"}</button>
+        <button class="ghost" style="width:auto;margin:0;padding:6px 12px;font-size:12px" onclick="delBook('${b.id}')">🗑</button>
+      </div>
+      <p class="hint" style="margin-top:6px">${b.text.length.toLocaleString()}文字・約+${y}円/往復（連続中 約+${Math.round(y)/10}円）${b.on?"":"・いまはお休み中"}</p>
+    </div>`;
+  }).join("");
+}
+function newBookForm(){
+  document.getElementById("f-book-new").style.display="block";
+  document.getElementById("fb-add").style.display="none";
+}
+function saveBook(){
+  const c=db.companions.find(x=>x.id===state.editing);
+  if(!c)return;
+  const title=document.getElementById("fb-title").value.trim()||"名前のない本";
+  const text=document.getElementById("fb-text").value;
+  if(!text.trim()){toast("中身が空っぽだよ");return;}
+  if(text.length>50000&&!confirm("この本はかなり大きい（"+text.length.toLocaleString()+"文字）。1往復あたり約+"+bookYen(text.length,c.model)+"円かかるけど、しまう？"))return;
+  if(!c.books)c.books=[];
+  c.books.push({id:uid(),title,text,on:true});
+  save();
+  document.getElementById("fb-title").value="";
+  document.getElementById("fb-text").value="";
+  document.getElementById("f-book-new").style.display="none";
+  document.getElementById("fb-add").style.display="block";
+  renderBooks();toast("「"+title+"」を本棚にしまったよ");
+}
+function toggleBook(id){
+  const c=db.companions.find(x=>x.id===state.editing);
+  const b=(c.books||[]).find(x=>x.id===id);
+  if(!b)return;
+  b.on=!b.on;save();renderBooks();
+}
+function delBook(id){
+  const c=db.companions.find(x=>x.id===state.editing);
+  const b=(c.books||[]).find(x=>x.id===id);
+  if(!b)return;
+  if(!confirm("「"+b.title+"」を本棚から捨てる？（元に戻せないよ）"))return;
+  c.books=c.books.filter(x=>x.id!==id);
+  save();renderBooks();
 }
 
 /* ---------- お天気と気圧（Open-Meteo・鍵いらず） ---------- */
