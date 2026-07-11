@@ -35,11 +35,10 @@ body{
 #scr-chat{position:relative;background:color-mix(in srgb, var(--acc) 3%, var(--wall,var(--paper)));}
 #chat-log{position:relative;z-index:1;}
 .roomwin{
-  position:relative;width:96px;height:112px;flex-shrink:0;
-  align-self:flex-end;margin:2px 8px 6px 0;
+  position:absolute;top:calc(env(safe-area-inset-top) + 72px);left:14px;width:88px;height:104px;
   border:3px solid #A08A6F;border-radius:14px 14px 8px 8px;
   box-shadow:0 2px 8px rgba(0,0,0,.10), inset 0 0 0 2px rgba(255,255,255,.55);
-  pointer-events:none;overflow:hidden;opacity:.95;
+  pointer-events:none;overflow:hidden;opacity:.95;z-index:0;
   background:linear-gradient(#8EC9F0,#D9EFFB);
   transition:background 1.2s ease;
 }
@@ -358,6 +357,7 @@ textarea{resize:none;line-height:1.7;}
     <h1 id="ch-name"></h1>
     <button class="hbtn" onclick="memorizeNow()" aria-label="ここまでを記憶に">🧠</button>
   </div>
+  <div class="roomwin" id="room-win" style="display:none"></div>
   <div class="chat" id="chat-log"></div>
   <div class="pv" id="ch-pv" style="display:none">
     <img id="ch-pv-img" alt="">
@@ -768,16 +768,15 @@ function openChat(convoId){
   scr.style.setProperty("--acc",c.color);
   if(c.roomWall)scr.style.setProperty("--wall",c.roomWall);
   else scr.style.removeProperty("--wall");
+  document.getElementById("room-win").style.display=c.roomWin?"block":"none";
   document.getElementById("ch-name").textContent=c.name;
   renderChat();
   go("chat");
 }
 function renderChat(){
   const v=db.conversations.find(x=>x.id===state.currentConvo);
-  const cc=db.companions.find(x=>x.id===v.companionId);
   const log=document.getElementById("chat-log");
-  const winHtml=(cc&&cc.roomWin)?`<div class="roomwin"></div>`:"";
-  let html=winHtml+v.messages.map((m,i)=>{
+  let html=v.messages.map((m,i)=>{
     if(m.role==="user"){
       let inner="";
       if(m.img)inner+=`<img class="pimg" src="${m.img}" alt="写真">`;
