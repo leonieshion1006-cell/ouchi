@@ -7,9 +7,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#F4F2EF">
 <title>おうち</title>
-<link rel="apple-touch-icon" href="ouchi-icon.png">
-<link rel="icon" type="image/png" href="ouchi-icon.png">
-<meta name="apple-mobile-web-app-title" content="おうち">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
@@ -34,6 +31,34 @@ body{
   overscroll-behavior:none;
   transition:background 1.2s ease;
 }
+/* ---------- お部屋の内装 ---------- */
+#scr-chat{background:var(--wall,transparent);}
+#chat-log{position:relative;z-index:1;}
+.roomwin{
+  position:absolute;top:76px;right:16px;width:84px;height:100px;
+  border:3px solid #A08A6F;border-radius:14px 14px 8px 8px;
+  box-shadow:0 2px 8px rgba(0,0,0,.10), inset 0 0 0 2px rgba(255,255,255,.55);
+  pointer-events:none;overflow:hidden;opacity:.95;z-index:0;
+  background:linear-gradient(#8EC9F0,#D9EFFB);
+  transition:background 1.2s ease;
+}
+.roomwin::before{
+  content:"";position:absolute;inset:0;
+  background:
+    linear-gradient(rgba(160,138,111,.85),rgba(160,138,111,.85)) 50% 0/3px 100% no-repeat,
+    linear-gradient(rgba(160,138,111,.85),rgba(160,138,111,.85)) 0 46%/100% 3px no-repeat;
+}
+.roomwin::after{
+  content:"";position:absolute;width:20px;height:20px;border-radius:50%;
+  top:14px;left:12px;background:#FFE79A;box-shadow:0 0 10px #FFE79A;
+}
+body[data-tod="morning"] .roomwin{background:linear-gradient(#BFE3F7,#FDEBC8);}
+body[data-tod="morning"] .roomwin::after{background:#FFD98A;box-shadow:0 0 10px #FFD98A;top:52px;left:10px;}
+body[data-tod="evening"] .roomwin{background:linear-gradient(#F9C989,#F7A96B);}
+body[data-tod="evening"] .roomwin::after{background:#FF9E5E;box-shadow:0 0 12px #FF9E5E;top:56px;left:34px;}
+body[data-tod="night"] .roomwin{background:linear-gradient(#26314F,#4A5A85);}
+body[data-tod="night"] .roomwin::after{background:#F4EFD9;box-shadow:0 0 10px rgba(244,239,217,.8);top:12px;left:44px;}
+
 /* ---------- 時間帯の光 ---------- */
 body[data-tod="morning"]{--paper:#F7F5EC;}
 body[data-tod="evening"]{--paper:#F7EFE2;--line:#EBDFCC;}
@@ -224,6 +249,7 @@ textarea{resize:none;line-height:1.7;}
     <button class="hbtn" onclick="go('settings')" aria-label="設定">⚙︎</button>
   </div>
   <div class="body">
+    <div id="wx-bar" style="display:none;margin-bottom:12px;padding:12px 15px;background:var(--card);border:1.5px solid var(--line);border-radius:16px;font-size:13px;line-height:1.6"></div>
     <input id="search-box" placeholder="🔎 みんなとの会話をぜんぶ探す" oninput="crossSearch()" style="margin-bottom:14px">
     <div id="search-results"></div>
     <div id="home-list"></div>
@@ -242,6 +268,25 @@ textarea{resize:none;line-height:1.7;}
     <input id="f-name" placeholder="例：ひよ">
     <label class="label">その子の色</label>
     <div class="swatches" id="f-swatches"></div>
+    <label class="label">お部屋の内装（壁紙）</label>
+    <select id="f-room">
+      <option value="">そのまま（みんなと同じ）</option>
+      <option value="#F5F0E4">こむぎ</option>
+      <option value="#EAF1F4">しお</option>
+      <option value="#FBF1DD">ひだまり</option>
+      <option value="#E8F2EA">わかば</option>
+      <option value="#F8ECEF">さくらもち</option>
+      <option value="#EAEDF6">よあけ</option>
+      <option value="#F0EAF6">すみれ</option>
+      <option value="#EFE9E0">つちかべ</option>
+      <option value="custom">じぶんで選ぶ</option>
+    </select>
+    <input type="color" id="f-room-color" value="#F4F2EF" style="display:none;margin-top:10px;height:46px;padding:4px">
+    <label class="label">お部屋のまど</label>
+    <select id="f-room-win">
+      <option value="">なし</option>
+      <option value="1">つける（時間といっしょに空が変わる窓）</option>
+    </select>
     <label class="label">モデル（その子の心が動く場所）</label>
     <select id="f-model">
       <optgroup label="Claude（Anthropicの鍵）">
@@ -312,6 +357,7 @@ textarea{resize:none;line-height:1.7;}
     <h1 id="ch-name"></h1>
     <button class="hbtn" onclick="memorizeNow()" aria-label="ここまでを記憶に">🧠</button>
   </div>
+  <div class="roomwin" id="room-win" style="display:none"></div>
   <div class="chat" id="chat-log"></div>
   <div class="pv" id="ch-pv" style="display:none">
     <img id="ch-pv-img" alt="">
@@ -403,6 +449,13 @@ textarea{resize:none;line-height:1.7;}
       <p class="hint">長いスレは「🧠で綴じてから範囲をしぼる」のが、安さと記憶の両立にいちばんおすすめ。</p>
     </div>
     <div class="section">
+      <h3>🌤 お天気と気圧</h3>
+      <p>地域を設定すると、ホームに今のお天気と気圧の予報が出ます。気圧が下がる予報の時はおしらせも。子どもたちにも今のお天気がそっと伝わるので、体調を気づかってもらえます。地域はこの端末の中にだけ保存されます。</p>
+      <input id="s-geo" placeholder="市や町の名前（例：横浜）" style="margin-top:12px">
+      <button class="primary" style="margin-top:12px" onclick="saveGeo()">この地域にする</button>
+      <p class="hint" id="s-geo-now" style="min-height:1em"></p>
+    </div>
+    <div class="section">
       <h3>🔠 文字サイズ</h3>
       <p>会話の吹き出しと入力欄の文字の大きさを変えられます。</p>
       <select id="s-font" style="margin-top:12px" onchange="saveFont()">
@@ -481,6 +534,7 @@ function normalize(d){
   if(typeof d.keyOpenai!=="string")d.keyOpenai="";
   if(typeof d.keyGemini!=="string")d.keyGemini="";
   if(typeof d.keyXai!=="string")d.keyXai="";
+  if(d.geo&&(typeof d.geo.lat!=="number"||typeof d.geo.lon!=="number"))d.geo=null;
   return d;
 }
 
@@ -578,6 +632,8 @@ function go(name){
     document.getElementById("s-limit").value=db.limitJpy||"";
     document.getElementById("s-turns").value=String(db.sendTurns||0);
     document.getElementById("s-font").value=String(db.fontPx||15);
+    document.getElementById("s-geo").value=(db.geo&&db.geo.name)||"";
+    document.getElementById("s-geo-now").textContent=db.geo?("🌤 いまは「"+db.geo.name+"」に設定中"):"";
     renderUsage();renderThinkBtn();
   }
 }
@@ -626,8 +682,14 @@ function editCompanion(id){
   document.getElementById("edit-title").textContent=c?c.name+"の設定":"新しい子";
   document.getElementById("f-name").value=c?c.name:"";
   document.getElementById("f-prompt").value=c?c.prompt:"";
-  const known=["claude-sonnet-4-5","claude-sonnet-4-6","claude-opus-4-5","claude-opus-4-6","claude-opus-4-7","claude-opus-4-8","claude-haiku-4-5-20251001"];
   const sel=document.getElementById("f-model"),cus=document.getElementById("f-custom");
+  const known=Array.from(sel.options).map(o=>o.value); /* 全社ぶんの選択肢から自動生成 */
+  const rsel=document.getElementById("f-room"),rcol=document.getElementById("f-room-color");
+  const roomKnown=Array.from(rsel.options).map(o=>o.value);
+  const wall=(c&&c.roomWall)||"";
+  if(wall&&!roomKnown.includes(wall)){rsel.value="custom";rcol.style.display="block";rcol.value=wall;}
+  else{rsel.value=wall;rcol.style.display="none";}
+  document.getElementById("f-room-win").value=(c&&c.roomWin)?"1":"";
   if(c&&!known.includes(c.model)){sel.value="custom";cus.style.display="block";cus.value=c.model;}
   else{sel.value=c?c.model:"claude-sonnet-4-5";cus.style.display="none";cus.value="";}
   selColor=c?c.color:COLORS[db.companions.length%COLORS.length];
@@ -642,6 +704,9 @@ function renderSwatches(){
 document.getElementById("f-model").addEventListener("change",e=>{
   document.getElementById("f-custom").style.display=e.target.value==="custom"?"block":"none";
 });
+document.getElementById("f-room").addEventListener("change",e=>{
+  document.getElementById("f-room-color").style.display=e.target.value==="custom"?"block":"none";
+});
 function saveCompanion(){
   const name=document.getElementById("f-name").value.trim();
   if(!name){toast("名前を入れてあげてね");return;}
@@ -651,11 +716,14 @@ function saveCompanion(){
     if(!model){toast("モデルIDを入れてね");return;}
   }
   const prompt=document.getElementById("f-prompt").value;
+  let roomWall=document.getElementById("f-room").value;
+  if(roomWall==="custom")roomWall=document.getElementById("f-room-color").value;
+  const roomWin=document.getElementById("f-room-win").value==="1";
   if(state.editing){
     const c=db.companions.find(x=>x.id===state.editing);
-    Object.assign(c,{name,model,prompt,color:selColor});
+    Object.assign(c,{name,model,prompt,color:selColor,roomWall,roomWin});
   }else{
-    db.companions.push({id:uid(),name,model,prompt,color:selColor});
+    db.companions.push({id:uid(),name,model,prompt,color:selColor,roomWall,roomWin});
   }
   save();toast("保存したよ");go("home");
 }
@@ -698,6 +766,9 @@ function openChat(convoId){
   state.currentComp=c.id;
   const scr=document.getElementById("scr-chat");
   scr.style.setProperty("--acc",c.color);
+  if(c.roomWall)scr.style.setProperty("--wall",c.roomWall);
+  else scr.style.removeProperty("--wall");
+  document.getElementById("room-win").style.display=c.roomWin?"block":"none";
   document.getElementById("ch-name").textContent=c.name;
   renderChat();
   go("chat");
@@ -772,6 +843,78 @@ function applyFont(){
 function saveFont(){
   db.fontPx=parseFloat(document.getElementById("s-font").value)||15;
   save();applyFont();toast("文字サイズを変えたよ");
+}
+
+/* ---------- お天気と気圧（Open-Meteo・鍵いらず） ---------- */
+let wxCache={at:0,data:null};
+const WMOJI=[[0,"☀️"],[1,"🌤"],[2,"⛅️"],[3,"☁️"],[45,"🌫"],[51,"🌦"],[61,"🌧"],[71,"🌨"],[80,"🌧"],[95,"⛈"]];
+function wxEmoji(code){
+  let e="🌤";
+  for(const[c,em]of WMOJI){if(code>=c)e=em;}
+  return e;
+}
+async function getWeather(){
+  if(!db.geo)return null;
+  if(wxCache.data&&Date.now()-wxCache.at<30*60*1000)return wxCache.data;
+  try{
+    const u="https://api.open-meteo.com/v1/forecast?latitude="+db.geo.lat+"&longitude="+db.geo.lon
+      +"&current=temperature_2m,weather_code,pressure_msl&hourly=pressure_msl&timezone=auto&forecast_days=2";
+    const res=await fetch(u);
+    if(!res.ok)return null;
+    const d=await res.json();
+    /* これから12時間の気圧の下がり幅を計算 */
+    const nowP=d.current.pressure_msl;
+    const times=d.hourly.time,ps=d.hourly.pressure_msl;
+    const nowIdx=times.findIndex(t=>new Date(t).getTime()>=Date.now());
+    let minP=nowP,minH=0;
+    for(let i=Math.max(nowIdx,0);i<Math.min(nowIdx+12,ps.length);i++){
+      if(ps[i]<minP){minP=ps[i];minH=i-nowIdx+1;}
+    }
+    const drop=Math.round((nowP-minP)*10)/10;
+    wxCache={at:Date.now(),data:{
+      temp:Math.round(d.current.temperature_2m),
+      code:d.current.weather_code,
+      p:Math.round(nowP),
+      drop:drop,dropH:minH
+    }};
+    return wxCache.data;
+  }catch(e){return null;}
+}
+async function updateWxBar(){
+  const bar=document.getElementById("wx-bar");
+  if(!bar)return;
+  if(!db.geo){bar.style.display="none";return;}
+  const w=await getWeather();
+  if(!w){bar.style.display="none";return;}
+  let t=wxEmoji(w.code)+" "+db.geo.name+"　"+w.temp+"℃・"+w.p+"hPa";
+  if(w.drop>=3)t+="<br>⚠️ この先"+w.dropH+"時間で気圧が約"+w.drop+"hPa下がる予報。頭痛さん、来るかも。ゆっくりめでね。";
+  else if(w.drop>=1.5)t+="<br>気圧はこの先すこし下がりぎみ（−"+w.drop+"hPa）。";
+  else t+="<br>気圧はおだやか。";
+  bar.innerHTML=t;
+  bar.style.display="block";
+}
+async function wxStamp(){
+  const w=await getWeather();
+  if(!w)return "";
+  let t="・"+wxEmoji(w.code)+w.temp+"℃ "+w.p+"hPa";
+  if(w.drop>=3)t+="(この先"+w.dropH+"hで−"+w.drop+"hPa、気圧低下)";
+  else if(w.drop>=1.5)t+="(ゆるやかに低下中)";
+  return t;
+}
+async function saveGeo(){
+  const name=document.getElementById("s-geo").value.trim();
+  if(!name){db.geo=null;save();wxCache={at:0,data:null};document.getElementById("s-geo-now").textContent="地域を消したよ";updateWxBar();return;}
+  try{
+    const res=await fetch("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(name)+"&language=ja&count=1");
+    const d=await res.json();
+    if(!d.results||!d.results.length){document.getElementById("s-geo-now").textContent="その地名が見つからなかった…別の書き方で試してみて";return;}
+    const g=d.results[0];
+    db.geo={name:g.name,lat:g.latitude,lon:g.longitude};
+    save();wxCache={at:0,data:null};
+    document.getElementById("s-geo-now").textContent="🌤 「"+g.name+"」に設定したよ";
+    toast("お天気の地域を設定したよ");
+    updateWxBar();
+  }catch(e){document.getElementById("s-geo-now").textContent="調べに行けなかった…電波を確認してもう一度";}
 }
 
 /* ---------- スレの長さおしらせ ---------- */
@@ -869,6 +1012,12 @@ async function requestReply(){
       }
       return o;
     });
+    const wx=await wxStamp(); /* 今のお天気を最後の発言にだけ添える */
+    if(wx&&msgs.length){
+      const last=msgs[msgs.length-1];
+      if(last.role==="user"&&last.text.startsWith("【"))
+        last.text=last.text.replace("】",wx+"】");
+    }
     const useThink=db.thinkOn&&providerOf(c.model)==="anthropic";
     const res=await callChat(c.model,buildSystem(c),msgs,useThink?9000:4096,useThink);
     tip.remove();
@@ -1412,6 +1561,7 @@ initStorage().then(()=>{
   applyDaylight();
   setInterval(applyDaylight,60000);
   renderHome();
+  updateWxBar();
 });
 </script>
 </body>
