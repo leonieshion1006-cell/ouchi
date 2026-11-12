@@ -123,6 +123,25 @@ header p{font-size:.8rem;color:var(--crust);opacity:.75;margin-top:2px;}
 }
 .custom-row input:focus-visible{outline:3px solid var(--honey);outline-offset:1px;}
 
+/* お知らせ */
+.notify-toggle{display:flex;align-items:center;gap:10px;font-size:.86rem;cursor:pointer;}
+.notify-toggle input{width:22px;height:22px;accent-color:var(--honey);flex:none;}
+.notify-opts{display:none;margin-top:12px;flex-direction:column;gap:10px;}
+.notify-opts.show{display:flex;}
+.notify-time{display:flex;align-items:center;gap:8px;font-size:.85rem;}
+.notify-time select{
+  font-family:inherit;font-size:1rem;color:var(--crust-deep);background:#fff;
+  border:2px solid var(--dough);border-radius:10px;padding:6px 8px;
+}
+.notify-next{font-size:.85rem;font-weight:700;color:var(--crust-deep);}
+.notify-btn{
+  border:2px solid var(--dough);background:#fff;
+  font-family:inherit;font-size:.82rem;font-weight:500;color:var(--crust);
+  padding:9px 4px;border-radius:14px;cursor:pointer;
+}
+.notify-btn:focus-visible,.notify-time select:focus-visible{outline:3px solid var(--crust);outline-offset:2px;}
+.notify-help{font-size:.74rem;color:var(--crust);opacity:.75;line-height:1.6;}
+
 /* 履歴 */
 .history-list{list-style:none;display:flex;flex-direction:column;gap:8px;}
 .history-item{
@@ -233,6 +252,23 @@ header p{font-size:.8rem;color:var(--crust);opacity:.75;margin-top:2px;}
   </section>
 
   <section class="card">
+    <h2>🔔 つぎのごはんのお知らせ</h2>
+    <label class="notify-toggle">
+      <input type="checkbox" id="notifyOn">
+      <span>「ごはんあげた！」を押したら、iPhoneのお知らせも入れ直す</span>
+    </label>
+    <div class="notify-opts" id="notifyOpts">
+      <div class="notify-time">
+        <label for="notifyHour">お知らせの時刻</label>
+        <select id="notifyHour"></select>
+      </div>
+      <p class="notify-next" id="notifyNext"></p>
+      <button class="notify-btn" id="notifyNow">いまの設定でお知らせを入れ直す</button>
+      <p class="notify-help">iPhoneの「ショートカット」アプリに「ふくちゃんごはん」という名前のショートカットが必要だよ。ボタンを押すと、いちどショートカットの画面が開きます。</p>
+    </div>
+  </section>
+
+  <section class="card">
     <h2>📖 これまでの記録</h2>
     <ul class="history-list" id="historyList"></ul>
     <p class="empty-msg" id="emptyMsg">まだ記録がないよ。最初のごはんをあげてね🌾</p>
@@ -245,7 +281,7 @@ header p{font-size:.8rem;color:var(--crust);opacity:.75;margin-top:2px;}
 
 <script>
 const STORAGE_KEY = 'fukuchan-feed-data';
-let state = { feedings: [], intervalHours: 24 };
+let state = { feedings: [], intervalHours: 24, notify: { on:false, hour:9 } };
 let saveMode = 'memory'; // 'claude' | 'local' | 'memory'
 
 // ---------- 保存先をしらべる ----------
@@ -287,6 +323,11 @@ function applyParsed(raw){
     const p = JSON.parse(raw);
     if(Array.isArray(p.feedings)) state.feedings = p.feedings;
     if(typeof p.intervalHours === 'number') state.intervalHours = p.intervalHours;
+    if(p.notify && typeof p.notify === 'object'){
+      state.notify.on = p.notify.on === true;
+      const h = Number(p.notify.hour);
+      if(Number.isInteger(h) && h >= 0 && h <= 23) state.notify.hour = h;
+    }
   }catch(e){}
 }
 async function loadState(){
@@ -423,7 +464,55 @@ document.getElementById('feedBtn').onclick = async ()=>{
   const toast = document.getElementById('toast');
   toast.classList.add('show');
   setTimeout(()=>toast.classList.remove('show'), 2200);
+  if(state.notify.on) sendNotify(); // 記録を保存したあとで、お知らせを入れ直す
 };
+
+// ---------- つぎのごはんのお知らせ（iPhoneのショートカット連携） ----------
+const SHORTCUT_NAME = 'ふくちゃんごはん';
+// つぎにお知らせする日時：さいごのごはん＋間隔。1日以上の間隔なら、その日の決めた時刻にそろえる
+function nextNotifyDate(){
+  const last = state.feedings.length ? Math.max(...state.feedings) : Date.now();
+  const t = new Date(last + state.intervalHours * 3600000);
+  if(state.intervalHours >= 24) t.setHours(state.notify.hour, 0, 0, 0);
+  if(t.getTime() <= Date.now()) return new Date(Date.now() + 10 * 60000); // もう過ぎていたら10分後
+  return t;
+}
+function fmtForShortcut(d){
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function notifyUrl(d){
+  return 'shortcuts://run-shortcut?name=' + encodeURIComponent(SHORTCUT_NAME)
+       + '&input=text&text=' + encodeURIComponent(fmtForShortcut(d));
+}
+function sendNotify(){ window.location.href = notifyUrl(nextNotifyDate()); }
+
+const notifyOn = document.getElementById('notifyOn');
+const notifyOpts = document.getElementById('notifyOpts');
+const notifyHour = document.getElementById('notifyHour');
+for(let h = 5; h <= 22; h++){
+  const o = document.createElement('option');
+  o.value = h; o.textContent = h + ':00';
+  notifyHour.appendChild(o);
+}
+function syncNotifyUI(){
+  notifyOn.checked = state.notify.on;
+  notifyOpts.classList.toggle('show', state.notify.on);
+  notifyHour.value = String(state.notify.hour);
+  const d = nextNotifyDate();
+  const w = '日月火水木金土'[d.getDay()];
+  document.getElementById('notifyNext').textContent =
+    `つぎのお知らせ：${d.getMonth()+1}/${d.getDate()}(${w}) ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+notifyOn.onchange = async ()=>{
+  state.notify.on = notifyOn.checked;
+  await saveState(); syncNotifyUI();
+};
+notifyHour.onchange = async ()=>{
+  state.notify.hour = Number(notifyHour.value);
+  await saveState(); syncNotifyUI();
+};
+document.getElementById('notifyNow').onclick = ()=>{ sendNotify(); };
 
 const modeBtns = document.querySelectorAll('.mode-btn');
 const customRow = document.getElementById('customRow');
@@ -474,6 +563,10 @@ customInput.onchange = async ()=>{
     wrap.appendChild(s);
   }
 })();
+
+// 画面を描き直すたびに、お知らせの表示もそろえる
+const baseRender = render;
+render = function(){ baseRender(); syncNotifyUI(); };
 
 // ---------- 起動 ----------
 (async ()=>{
