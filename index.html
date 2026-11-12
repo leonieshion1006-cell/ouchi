@@ -484,7 +484,7 @@ textarea{resize:none;line-height:1.7;}
     </div>
     <div class="section">
       <h3>おひっこし（バックアップ）</h3>
-      <p>みんなの設定と会話をファイルに保存できます。機種変更の前や、ときどきのお守りに。</p>
+      <p>みんなの設定と会話をファイルに保存できます。機種変更の前や、ときどきのお守りに。APIキーはファイルに入らないので、新しい端末では鍵だけ入れ直してね。</p>
       <button class="ghost" style="margin-top:12px" onclick="exportData()">ファイルに書き出す</button>
       <button class="ghost" onclick="document.getElementById('s-import').click()">ファイルから読み込む</button>
       <input id="s-import" type="file" accept=".json" style="display:none" onchange="importData(event)">
@@ -1620,8 +1620,12 @@ function resetSpent(){
   if(!confirm("使用量メーターをゼロに戻す？（実際の請求とは関係ない、アプリ内の記録だけだよ）"))return;
   db.spentUsd=0;save();renderUsage();toast("ゼロに戻したよ");
 }
+/* バックアップにAPIキーは入れない（ファイルが人目に触れても鍵が漏れないように） */
+const KEY_FIELDS=["apiKey","keyOpenai","keyGemini","keyXai"];
 function exportData(){
-  const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
+  const out=Object.assign({},db);
+  KEY_FIELDS.forEach(k=>{delete out[k];});
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
   const d=new Date();
@@ -1637,7 +1641,11 @@ function importData(ev){
       const d=JSON.parse(r.result);
       if(!d.companions)throw 0;
       if(!confirm("今のデータをファイルの内容で置き換えます。いい？"))return;
+      /* APIキーはファイルからは読み込まず、この端末に入っている鍵をそのまま使い続ける */
+      const keep={};
+      KEY_FIELDS.forEach(k=>{keep[k]=typeof db[k]==="string"?db[k]:"";});
       db=normalize(d);
+      KEY_FIELDS.forEach(k=>{db[k]=keep[k];});
       save();toast("読み込んだよ");go("home");
     }catch(e){toast("このファイルは読めなかった…");}
   };
